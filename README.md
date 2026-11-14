@@ -4,4 +4,35 @@ A Cities: Skylines II mod that inventories every loaded asset, records which one
 which packs you never use, so you can trim your playset and shorten loading times. It only reports: it never
 unsubscribes, disables or deletes anything.
 
-Status: design. See `docs/feature/`.
+Status: internal, not published. Design in `docs/feature/`.
+
+## How it works
+
+- When a city finishes loading, the mod reads every loaded prefab, works out the pack it comes from (Paradox Mods id,
+  local folder under `Mods/`, the game, or "runtime" for prefabs made by Extra Assets Importer and code mods) and the
+  prefabs it references. It writes this to `ModsData/asset-usage/inventory.json`.
+- It then reads every entity in the city and records the prefabs in use. While you play, it adds the prefabs of new
+  entities (placed by any tool, or grown by the game).
+- Everything a used prefab references (meshes, sub-objects, sub-nets, variants...) counts as used indirectly.
+- History per city goes to `ModsData/asset-usage/usage.json`: first and last day each prefab was seen, directly or
+  indirectly. It is written when the city loads, every 5 minutes, when you save, when you leave the city and when
+  the game closes.
+- The log is `Logs/asset-usage.log`.
+
+## Report
+
+```
+python3 tools/usage_report.py [--cities id1,id2] [--since 2026-11-14] [--no-sizes]
+```
+
+It writes `report.html` and `candidates.csv` next to the data. Packs are split into candidates (nothing used),
+review by hand (unused but bring zones, themes, UI or other types the scan cannot see), protected, used and
+unattributed. Pack ids or Paradox Mods ids listed one per line in `ModsData/asset-usage/protected.txt` are never
+candidates.
+
+Only cities loaded with the mod count, so load each city you play at least once before trusting the candidates.
+
+## Build
+
+- Tests: `dotnet test AssetUsage.Tests`
+- Deploy (game closed): `dotnet build AssetUsage -p:Deploy=true` copies the DLL to `Mods/asset-usage`.

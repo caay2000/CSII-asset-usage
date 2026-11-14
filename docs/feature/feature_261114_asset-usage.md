@@ -78,7 +78,7 @@ packs se usan de verdad en las ciudades y cuáles se instalaron y nunca se tocar
   falta las dos.
 - **Rendimiento**: el escaneo al cargar va en un job (R4.2). El objetivo es unos segundos en una ciudad grande y nada
   perceptible por fotograma durante la partida. El inventario de ~70.000 prefabs se escribe una vez por arranque.
-- **Datos** en `ModsData/<NombreMod>/`, en JSON con versión de esquema y escritura atómica (R9.1, R9.2). El mod nunca
+- **Datos** en `ModsData/asset-usage/`, en JSON con versión de esquema y escritura atómica (R9.1, R9.2). El mod nunca
   toca datos de otros mods (R9.3).
 - **Convenciones del repo**: código, logs, tests y herramientas en inglés; sin comentarios en el código; versión
   semver patch por cambio.
@@ -111,7 +111,7 @@ reutilizan ideas y el csproj de Building Collections, sin dependencia entre los 
      placeholders);
    - decidir la identidad de la ciudad (id del save), que bloquea los pasos 2 y 3;
    - mirar si Skyve importa una lista de ids o un playset en JSON.
-   Antes del paso 1 hay que decidir el nombre del mod, porque de él depende la ruta `ModsData/<NombreMod>/`.
+   El nombre del mod es **asset-usage** (decidido el 2026-11-14): datos en `ModsData/asset-usage/`.
 1. **Inventario**: un sistema que, al acabar la carga de prefabs, escribe `packs` y `prefabs` (con `refs`). Tests en
    `Core` de la clasificación por origen y de "colocable".
 2. **Uso al cargar**: un job sobre las entidades con `PrefabRef` al terminar de cargar la partida, que actualiza
@@ -137,6 +137,5 @@ reutilizan ideas y el csproj de Building Collections, sin dependencia entre los 
 - **Ciudades no cargadas**: un pack usado solo en una partida que no has abierto con el mod saldrá como candidato.
   El informe debe decir qué ciudades se han escaneado.
 - **Identidad de la ciudad**: si se renombra o se guarda con otro nombre puede contar como ciudad nueva.
-- **Nombre del mod**: por decidir, antes del paso 1 (ruta de `ModsData`).
 - **Ahorro real**: el informe estima, no mide. La confirmación es arrancar con y sin los candidatos y comparar con
   `tools/startup_report.py`, del repo de Building Collections (se puede copiar aquí si hace falta).
