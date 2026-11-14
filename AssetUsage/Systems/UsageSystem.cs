@@ -62,6 +62,7 @@ namespace AssetUsage.Systems
 
         protected override void OnDestroy()
         {
+            FlushNow("destroy");
             if (GameManager.instance != null)
             {
                 GameManager.instance.onGameSaveLoad -= OnSaved;
@@ -76,6 +77,7 @@ namespace AssetUsage.Systems
             base.OnGamePreload(purpose, mode);
             FlushNow("leaving city");
             session = null;
+            indexOf.Clear();
         }
 
         protected override void OnGameLoadingComplete(Purpose purpose, GameMode mode)
@@ -117,6 +119,7 @@ namespace AssetUsage.Systems
 
                 if (DateTime.UtcNow >= nextFlush)
                 {
+                    Collect(placedQuery);
                     FlushNow("periodic");
                 }
             }
@@ -131,7 +134,7 @@ namespace AssetUsage.Systems
         {
             nextFlush = DateTime.UtcNow + FlushEvery;
             var current = session;
-            if (current == null || loaded == null || current.Direct.Count == current.Flushed)
+            if (current == null || loaded == null || (current.Direct.Count == current.Flushed && Storage.LastWriteSucceeded))
             {
                 return;
             }
@@ -147,6 +150,7 @@ namespace AssetUsage.Systems
             {
                 var indirect = Propagation.Indirect(direct, inventory.RefsOf);
                 ledger.Record(cityId, cityName, day, direct, indirect, key => inventory.Prefabs.TryGetValue(key, out var p) ? p : null);
+                Mod.Log.Info($"Usage history: {ledger.Prefabs.Count} prefabs in {ledger.Cities.Count} cities ({indirect.Count} used indirectly in this city).");
                 return ledger;
             }, Storage.UsagePath);
         }
@@ -208,8 +212,17 @@ namespace AssetUsage.Systems
 
         void OnSaved(string saveName, string previewUri, bool start, bool success)
         {
-            if (!start && success)
+            if (!start && success && session != null)
             {
+                try
+                {
+                    Collect(placedQuery);
+                }
+                catch (Exception e)
+                {
+                    Mod.Log.Error(e);
+                }
+
                 FlushNow("saved " + saveName);
             }
         }

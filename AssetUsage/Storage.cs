@@ -11,6 +11,7 @@ namespace AssetUsage
     {
         static readonly object gate = new object();
         static Task last = Task.CompletedTask;
+        static volatile bool lastWriteSucceeded = true;
 
         static readonly JsonSerializerSettings settings = new JsonSerializerSettings
         {
@@ -20,6 +21,8 @@ namespace AssetUsage
                 NamingStrategy = new Newtonsoft.Json.Serialization.CamelCaseNamingStrategy(),
             },
         };
+
+        public static bool LastWriteSucceeded => lastWriteSucceeded;
 
         public static string Folder => Path.Combine(EnvPath.kUserDataPath, "ModsData", "asset-usage");
 
@@ -96,10 +99,12 @@ namespace AssetUsage
                     File.Move(tmp, path);
                 }
 
+                lastWriteSucceeded = true;
                 Mod.Log.Info($"Wrote {what} to {path} in {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms.");
             }
             catch (Exception e)
             {
+                lastWriteSucceeded = false;
                 Mod.Log.Error($"Could not write {what}: {e}");
             }
         }

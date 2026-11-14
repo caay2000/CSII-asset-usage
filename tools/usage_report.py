@@ -204,6 +204,10 @@ th{{background:#f0f0f0}} h2{{margin-top:32px}} p{{max-width:900px}}
     print(f"Report: {out}")
 
 
+def safe_cell(text):
+    return "'" + text if text and text[0] in "=+-@" else text
+
+
 def write_candidates(args, rows):
     candidates = sorted((r for r in rows if r["status"] == "candidate"), key=lambda r: (-r["size"], -r["prefabs"]))
     path = os.path.join(args.out, "candidates.csv")
@@ -211,7 +215,7 @@ def write_candidates(args, rows):
         writer = csv.writer(f)
         writer.writerow(["id", "pdxId", "name", "sizeBytes", "prefabs"])
         for r in candidates:
-            writer.writerow([r["id"], r["pdxId"], r["name"], r["size"], r["prefabs"]])
+            writer.writerow([r["id"], r["pdxId"], safe_cell(r["name"]), r["size"], r["prefabs"]])
     print(f"Candidates: {path} ({len(candidates)})")
 
 
