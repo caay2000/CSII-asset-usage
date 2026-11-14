@@ -93,8 +93,10 @@ namespace AssetUsage
         {
             var asset = prefab.asset;
             var origin = new AssetOrigin { HasAsset = asset != null, Builtin = prefab.isBuiltin };
-            if (asset == null)
+            if (asset == null || asset.database == null)
             {
+                origin.HasAsset = asset != null;
+                origin.Database = asset != null ? "none" : null;
                 return origin;
             }
 
@@ -126,7 +128,14 @@ namespace AssetUsage
             prefab.TryGet(components);
             foreach (var component in components)
             {
-                component.GetDependencies(dependencies);
+                try
+                {
+                    component.GetDependencies(dependencies);
+                }
+                catch (Exception e)
+                {
+                    Mod.Log.Warn($"Could not read the references of {KeyOf(prefab)} ({component.GetType().Name}): {e.Message}");
+                }
             }
 
             return dependencies.Where(d => d != null).Select(KeyOf).Distinct().ToList();

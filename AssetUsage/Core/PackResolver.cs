@@ -113,7 +113,7 @@ namespace AssetUsage.Core
             }
 
             var match = ModsFolder.Match(path);
-            return match.Success ? match.Groups[1].Value : null;
+            return match.Success && !match.Groups[1].Value.Equals("pdx_mods", StringComparison.OrdinalIgnoreCase) ? match.Groups[1].Value : null;
         }
 
         static string PackFolder(string path, Regex folder)

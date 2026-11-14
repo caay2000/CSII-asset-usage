@@ -61,6 +61,14 @@ namespace AssetUsage.Tests
         }
 
         [Fact]
+        public void An_unrecognised_paradox_cache_folder_is_not_taken_for_a_local_pack()
+        {
+            var pack = PackResolver.Resolve(new AssetOrigin { HasAsset = true, Database = "User", Path = Cache + "odd/a.Prefab" });
+
+            Assert.Equal(PackSource.Unknown, pack.Source);
+        }
+
+        [Fact]
         public void Assets_that_match_nothing_are_unknown_by_database()
         {
             var pack = PackResolver.Resolve(new AssetOrigin { HasAsset = true, Database = "User", Path = "D:/elsewhere/a.Prefab" });
