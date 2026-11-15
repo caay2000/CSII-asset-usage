@@ -16,6 +16,8 @@ namespace AssetUsage
 
         readonly PrefabBase[] prefabs;
         readonly string[] keys;
+        readonly string[] types;
+        readonly string[] names;
         readonly List<ComponentBase> components = new List<ComponentBase>();
         readonly List<PrefabBase> dependencies = new List<PrefabBase>();
         readonly Stopwatch working = new Stopwatch();
@@ -23,11 +25,13 @@ namespace AssetUsage
         int next;
         int failed;
 
-        LoadedPrefabs(PrefabBase[] prefabs, string[] keys)
+        LoadedPrefabs(PrefabBase[] prefabs, string[] keys, string[] types, string[] names)
         {
             this.prefabs = prefabs;
             this.keys = keys;
-            Fingerprint = InventoryFingerprint.Of(keys);
+            this.types = types;
+            this.names = names;
+            Fingerprint = InventoryFingerprint.Of(keys) + "-v" + Mod.Version;
         }
 
         public Inventory Inventory { get; private set; }
@@ -47,12 +51,21 @@ namespace AssetUsage
             var started = DateTime.UtcNow;
             var prefabs = All(system).ToArray();
             var keys = new string[prefabs.Length];
+            var types = new string[prefabs.Length];
+            var names = new string[prefabs.Length];
             for (int i = 0; i < prefabs.Length; i++)
             {
-                keys[i] = prefabs[i] != null ? KeyOf(prefabs[i]) : null;
+                if (prefabs[i] == null)
+                {
+                    continue;
+                }
+
+                types[i] = prefabs[i].GetType().Name;
+                names[i] = prefabs[i].name;
+                keys[i] = Inventory.Key(types[i], names[i]);
             }
 
-            var loaded = new LoadedPrefabs(prefabs, keys);
+            var loaded = new LoadedPrefabs(prefabs, keys, types, names);
             Mod.Log.Info($"Listed {prefabs.Length} prefabs in {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms, fingerprint {loaded.Fingerprint}.");
             return loaded;
         }
@@ -97,19 +110,22 @@ namespace AssetUsage
             return true;
         }
 
-        public void Finish() => Step(TimeSpan.MaxValue);
-
         void Add(int index)
         {
             var prefab = prefabs[index];
-            if (prefab == null)
+            if (keys[index] == null)
             {
                 return;
             }
 
             try
             {
-                building.Add(prefab.GetType().Name, prefab.name, PackResolver.Resolve(OriginOf(prefab)), Dependencies(prefab, components, dependencies));
+                if (prefab == null)
+                {
+                    throw new InvalidOperationException("the prefab was destroyed");
+                }
+
+                building.Add(types[index], names[index], PackResolver.Resolve(OriginOf(prefab)), Dependencies(prefab, components, dependencies));
             }
             catch (Exception e)
             {
@@ -118,7 +134,7 @@ namespace AssetUsage
                     Mod.Log.Warn($"Could not read {keys[index]}: {e.Message}");
                 }
 
-                building.Add(prefab.GetType().Name, prefab.name, new PackRef { Id = PackSource.Unknown + ":error", Source = PackSource.Unknown, Name = "Could not read" }, Array.Empty<string>());
+                building.Add(types[index], names[index], new PackRef { Id = PackSource.Unknown + ":error", Source = PackSource.Unknown, Name = "Could not read" }, Array.Empty<string>());
             }
         }
 

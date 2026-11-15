@@ -108,6 +108,15 @@ namespace AssetUsage.Systems
 
         protected override void OnUpdate()
         {
+            try
+            {
+                BuildInventory();
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Error(e);
+            }
+
             if (session == null)
             {
                 return;
@@ -115,8 +124,6 @@ namespace AssetUsage.Systems
 
             try
             {
-                BuildInventory();
-
                 if (!createdQuery.IsEmptyIgnoreFilter)
                 {
                     Collect(createdQuery);
@@ -136,7 +143,7 @@ namespace AssetUsage.Systems
             }
         }
 
-        public void FlushNow(string reason, bool finishInventory = false)
+        public void FlushNow(string reason, bool final = false)
         {
             nextFlush = DateTime.UtcNow + FlushEvery;
             var current = session;
@@ -145,28 +152,23 @@ namespace AssetUsage.Systems
                 return;
             }
 
-            if (!loaded.Ready)
+            var inventory = loaded.Inventory;
+            if (inventory == null && !final)
             {
-                if (!finishInventory)
-                {
-                    return;
-                }
-
-                loaded.Finish();
-                SaveInventory();
+                return;
             }
 
             var direct = current.Direct.Select(loaded.Key).Where(k => k != null).ToList();
             current.Flushed = current.Direct.Count;
-            var inventory = loaded.Inventory;
             string day = DateTime.Now.ToString("yyyy-MM-dd");
             string cityId = current.CityId;
             string cityName = current.CityName;
             int frames = createdFrames;
-            Storage.Enqueue($"usage ({reason}: {direct.Count} prefabs used directly, {frames} frames with new entities)", () =>
+            string scope = inventory == null ? ", inventory not ready so direct use only" : "";
+            Storage.Enqueue($"usage ({reason}: {direct.Count} prefabs used directly, {frames} frames with new entities{scope})", () =>
             {
-                var indirect = Propagation.Indirect(direct, inventory.RefsOf);
-                ledger.Record(cityId, cityName, day, direct, indirect, key => inventory.Prefabs.TryGetValue(key, out var p) ? p : null);
+                var indirect = inventory != null ? Propagation.Indirect(direct, inventory.RefsOf) : new Dictionary<string, List<string>>();
+                ledger.Record(cityId, cityName, day, direct, indirect, key => inventory != null && inventory.Prefabs.TryGetValue(key, out var p) ? p : null);
                 Mod.Log.Info($"Usage history: {ledger.Prefabs.Count} prefabs in {ledger.Cities.Count} cities ({indirect.Count} used indirectly in this city).");
                 return ledger;
             }, Storage.UsagePath);
@@ -180,12 +182,12 @@ namespace AssetUsage.Systems
             }
 
             loaded = LoadedPrefabs.Snapshot(prefabSystem);
-            if (saved.IsCompleted && loaded.TryReuse(saved.Result))
+            if (TryReuseSaved())
             {
                 return;
             }
 
-            Mod.Log.Info(saved.IsCompleted ? "The loaded prefabs changed; building the inventory over the next frames." : "The saved inventory is still being read; building the inventory over the next frames.");
+            Mod.Log.Info(saved == null ? "The loaded prefabs changed; building the inventory over the next frames." : "The saved inventory is still being read; building the inventory over the next frames.");
         }
 
         void BuildInventory()
@@ -195,7 +197,7 @@ namespace AssetUsage.Systems
                 return;
             }
 
-            if (saved.IsCompleted && loaded.TryReuse(saved.Result))
+            if (TryReuseSaved())
             {
                 FlushNow("inventory reused");
                 return;
@@ -208,10 +210,21 @@ namespace AssetUsage.Systems
             }
         }
 
+        bool TryReuseSaved()
+        {
+            if (saved == null || !saved.IsCompleted)
+            {
+                return false;
+            }
+
+            var candidate = saved.Result;
+            saved = null;
+            return loaded.TryReuse(candidate);
+        }
+
         void SaveInventory()
         {
             var inventory = loaded.Inventory;
-            saved = Task.FromResult(inventory);
             Storage.Enqueue("inventory", () => inventory, Storage.InventoryPath);
         }
 
