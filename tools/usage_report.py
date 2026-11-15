@@ -101,6 +101,29 @@ def classify(pack_id, pack, stats, decisions):
     return base, base
 
 
+LIST_HEADER = "written by the asset usage report"
+
+
+def list_state(path, rows):
+    rows_by_key = {}
+    for r in rows:
+        if r["base"] in ("candidate", "manual"):
+            rows_by_key[r["id"]] = r["id"]
+            if r["pdxId"]:
+                rows_by_key[r["pdxId"]] = r["id"]
+    ids, keep = [], []
+    if os.path.exists(path):
+        with open(path, encoding="utf-8-sig") as f:
+            for line in f:
+                line = line.rstrip("\r\n")
+                key = line.split("#")[0].strip()
+                if key in rows_by_key:
+                    ids.append(rows_by_key[key])
+                elif key or (line.strip() and LIST_HEADER not in line):
+                    keep.append(line)
+    return {"ids": ids, "keep": keep}
+
+
 def read_ids(path):
     if not os.path.exists(path):
         return set()
@@ -183,7 +206,6 @@ STYLE = """
 --cand:#f0a070;--cand-bg:#3a2518;--manual:#e2c25a;--manual-bg:#342c12;--used:#7fcf94;--used-bg:#18301f;--prot:#a9adf2;--prot-bg:#24264a;--excl:#f28b9b;--excl-bg:#3d1a21;--un:#98a3ae;--un-bg:#232a31;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#14181c;--panel:#1b2026;--fg:#e4e8ec;--muted:#98a3ae;--line:#2c333b;--accent:#5fb3cf;
 --cand:#f0a070;--cand-bg:#3a2518;--manual:#e2c25a;--manual-bg:#342c12;--used:#7fcf94;--used-bg:#18301f;--prot:#a9adf2;--prot-bg:#24264a;--excl:#f28b9b;--excl-bg:#3d1a21;--un:#98a3ae;--un-bg:#232a31;color-scheme:dark}
-html{scroll-padding-top:150px}
 body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.5;margin:0}
 .wrap{max-width:1120px;margin:0 auto;padding-block:24px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
 h1,h2{font-family:var(--head);text-wrap:balance;margin:0}
@@ -228,15 +250,21 @@ LEFT_OUT = '<span class="pill unattributed">left out</span>'
 
 SCRIPT = """
 (function(){
-var KEY='asset-usage-decisions';
-var listed=JSON.parse(document.getElementById('listed').textContent);
+var lists=JSON.parse(document.getElementById('lists').textContent);
+var KEY='asset-usage-decisions:'+lists.folder;
+var inFile={protected:new Set(lists.protected.ids),excluded:new Set(lists.excluded.ids)};
+function fileDecision(id){return inFile.excluded.has(id)?'excluded':inFile.protected.has(id)?'protected':'';}
+function rows(){return Array.prototype.slice.call(document.querySelectorAll('tr[data-id]'));}
+var known=new Set(rows().map(function(tr){return tr.dataset.id;}));
 var overrides={};
 try{overrides=JSON.parse(localStorage.getItem(KEY))||{};}catch(e){}
-Object.keys(overrides).forEach(function(id){if((listed[id]||'')===overrides[id])delete overrides[id];});
+function prune(){Object.keys(overrides).forEach(function(id){if(!known.has(id)||overrides[id]===fileDecision(id))delete overrides[id];});}
+prune();
 function store(){try{localStorage.setItem(KEY,JSON.stringify(overrides));}catch(e){}}
-function decision(id){return id in overrides?overrides[id]:(listed[id]||'');}
+function decision(id){return id in overrides?overrides[id]:fileDecision(id);}
 function human(n){var u=['B','KB','MB','GB'],i=0;while(n>=1024&&i<3){n/=1024;i++;}return i?n.toFixed(1)+' '+u[i]:n+' B';}
-function rows(){return Array.prototype.slice.call(document.querySelectorAll('tr[data-id]'));}
+function pad(){var bar=document.querySelector('nav.bar');document.documentElement.style.scrollPaddingTop=(bar.offsetHeight+12)+'px';}
+pad();window.addEventListener('resize',pad);
 function place(tr){
 var d=decision(tr.dataset.id);
 tr.querySelector('.keep').setAttribute('aria-pressed',d==='protected');
@@ -259,7 +287,7 @@ document.getElementById('dirty').hidden=!pending;
 document.getElementById('dirty').textContent=pending+(pending===1?' change':' changes')+' not saved to the files yet';}
 function toggle(tr,kind){
 var id=tr.dataset.id,next=decision(id)===kind?'':kind;
-if(next===(listed[id]||''))delete overrides[id];else overrides[id]=next;
+if(next===fileDecision(id))delete overrides[id];else overrides[id]=next;
 store();place(tr);refresh();}
 rows().forEach(function(tr){
 tr.querySelector('.keep').addEventListener('click',function(){toggle(tr,'protected');});
@@ -267,15 +295,13 @@ tr.querySelector('.drop').addEventListener('click',function(){toggle(tr,'exclude
 place(tr);});
 refresh();
 function text(kind){
-var lines=['# '+kind+'.txt written by the asset usage report. One pack id per line; text after # is ignored.'];
-rows().forEach(function(tr){if(decision(tr.dataset.id)===kind)lines.push(tr.dataset.id+'  # '+tr.dataset.name);});
+var lines=['# '+kind+'.txt written by the asset usage report. One pack id per line; text after # is ignored.'].concat(lists[kind].keep);
+rows().forEach(function(tr){if(decision(tr.dataset.id)===kind)lines.push(tr.dataset.id+'  # '+tr.dataset.name.replace(/[\\r\\n]+/g,' '));});
 return lines.join('\\n')+'\\n';}
 function save(kind){
 var name=kind+'.txt',body=text(kind);
-function done(){rows().forEach(function(tr){var id=tr.dataset.id,d=decision(id);
-if(d===kind)listed[id]=kind;else if(listed[id]===kind)delete listed[id];
-if(id in overrides&&overrides[id]===(listed[id]||''))delete overrides[id];});
-store();refresh();}
+function done(){var now=new Set(rows().filter(function(tr){return decision(tr.dataset.id)===kind;}).map(function(tr){return tr.dataset.id;}));
+inFile[kind]=now;prune();store();refresh();}
 if(window.showSaveFilePicker){
 window.showSaveFilePicker({suggestedName:name,types:[{description:'Text',accept:{'text/plain':['.txt']}}]})
 .then(function(h){return h.createWritable().then(function(w){return w.write(body).then(function(){return w.close();});});})
@@ -338,9 +364,10 @@ def table(key, rows):
             f"<tbody class='none'><tr><td colspan='{cols}' class='empty'>None.</td></tr></tbody></table></div>")
 
 
-def listed_json(rows):
-    listed = {r["id"]: r["listed"] for r in rows if r["listed"] and r["base"] in ("candidate", "manual")}
-    return json.dumps(listed).replace("</", "<\\/")
+def lists_json(args, rows):
+    lists = {kind: list_state(os.path.join(args.data, f"{kind}.txt"), rows) for kind in ("protected", "excluded")}
+    lists["folder"] = args.data
+    return json.dumps(lists).replace("</", "<\\/")
 
 
 def write_html(args, rows, usage, cities, gone):
@@ -382,7 +409,7 @@ def write_html(args, rows, usage, cities, gone):
     page = f"""<title>Asset Usage Report</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@600&display=swap">
 <style>{STYLE}</style>
-<script type="application/json" id="listed">{listed_json(rows)}</script>
+<script type="application/json" id="lists">{lists_json(args, rows)}</script>
 <nav class="bar" aria-label="Sections"><div class="in">
 <div class="tiles">{tiles}</div>
 <div class="row"><input id="q" type="search" aria-label="Filter packs by name or id" placeholder="Filter packs by name or id">
