@@ -26,9 +26,13 @@ python3 tools/usage_report.py [--cities id1,id2] [--since 2026-11-14] [--no-size
 ```
 
 It writes `report.html` and `candidates.csv` next to the data. Packs are split into candidates (nothing used),
-review by hand (unused but bring zones, themes, UI or other types the scan cannot see), protected, used and
-unattributed. Pack ids or Paradox Mods ids listed one per line in `ModsData/asset-usage/protected.txt` are never
-candidates.
+review by hand (unused but bring zones, themes, UI or other types the scan cannot see), excluded, protected, used and
+unattributed. A pack whose only unseen type is its asset pack filter still counts as a candidate.
+
+Each candidate or review row has Protect and Exclude buttons. The browser remembers the choices until you save them
+with the buttons in the top bar as `protected.txt` and `excluded.txt` in `ModsData/asset-usage`; the next report reads
+both. Protected packs are never candidates, and `excluded.txt` is the list of packs to turn off in Skyve. Both files
+take one pack id or Paradox Mods id per line; text after `#` is ignored.
 
 Only cities loaded with the mod count, so load each city you play at least once before trusting the candidates.
 
