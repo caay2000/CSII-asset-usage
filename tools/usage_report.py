@@ -203,7 +203,7 @@ def types_text(types):
 def link(r):
     name = html.escape(r["name"])
     if r["pdxId"]:
-        return f'<a href="https://mods.paradoxplaza.com/mods/{r["pdxId"]}/Windows">{name}</a>'
+        return f'<a href="https://mods.paradoxplaza.com/mods/{html.escape(str(r["pdxId"]))}/Windows">{name}</a>'
     return name
 
 
@@ -241,7 +241,7 @@ def write_html(args, rows, usage, cities, gone):
     )
     city_rows = "".join(
         f"<tr><td>{html.escape(c.get('name') or '')}</td><td class='id'>{html.escape(cid)}</td>"
-        f"<td class='num'>{c.get('firstSeen', '')}</td><td class='num'>{c.get('lastSeen', '')}</td>"
+        f"<td class='num'>{html.escape(str(c.get('firstSeen', '')))}</td><td class='num'>{html.escape(str(c.get('lastSeen', '')))}</td>"
         f"<td>{COUNTED if not cities or cid in cities else LEFT_OUT}</td></tr>"
         for cid, c in usage.get("cities", {}).items()
     )
@@ -252,19 +252,23 @@ def write_html(args, rows, usage, cities, gone):
     gone_rows = "".join(f"<li><span class='id'>{html.escape(p)}</span>: {n} used prefabs</li>" for p, n in sorted(gone.items()))
     since = "all time" if args.since == "0000-00-00" else "since " + html.escape(args.since)
 
+    counted = len(cities) if cities else len(usage.get("cities", {}))
+    city_word = "city" if counted == 1 else "cities"
+    saving_block = (f'<div class="saving"><p>Pack sizes were not measured (--no-sizes): {len(candidates)} candidate packs ({saving_prefabs} prefabs) that no counted city uses.</p></div>'
+                    if args.no_sizes else
+                    f'<div class="saving"><span class="big">{human(saving)}</span><p>on disk across {len(candidates)} candidate packs ({saving_prefabs} prefabs) that no counted city uses.</p></div>')
     page = f"""<title>Asset Usage Report</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@600&display=swap">
 <style>{STYLE}</style>
 <div class="wrap">
 <div class="lead"><h1>Asset usage report</h1>
-<p>Usage {since} in {len(usage.get("cities", {}))} cities. Generated from inventory.json and usage.json. This report only lists packs; nothing is removed.</p></div>
-<div class="saving"><span class="big">{human(saving)}</span><p>on disk across {len(candidates)} candidate packs ({saving_prefabs} prefabs) that no counted city uses.</p></div>
+<p>Usage {since} in {counted} counted {city_word}. Generated from inventory.json and usage.json. This report only lists packs; nothing is removed.</p></div>
+{saving_block}
 <div class="tiles">{tiles}</div>
 <section><h2>Cities <span class="n">{len(usage.get("cities", {}))}</span></h2>
 <p>Only cities loaded with the mod count. A pack used only in a city you have not loaded since installing the mod shows up as a candidate.</p>
 <div class="scroll"><table><tr><th>Name</th><th>Id</th><th>First seen</th><th>Last seen</th><th></th></tr>{city_rows}</table></div></section>
-<label for="q"><input id="q" type="search" placeholder="Filter packs by name or id"></label>
+<input id="q" type="search" aria-label="Filter packs by name or id" placeholder="Filter packs by name or id">
 {"".join(sections)}
 <section><h2>Used packs not loaded now <span class="n">{len(gone)}</span></h2><ul>{gone_rows or '<li class="empty">None.</li>'}</ul></section>
 </div>
