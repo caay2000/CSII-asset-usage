@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.1.2 (2026-11-15)
+- Informe: los enlaces a Paradox Mods se abren en una pestaña nueva.
+
 ## 0.1.1 (2026-11-15)
 - Informe: botones Protect y Exclude en cada candidato y en cada pack a revisar, con sus listas en `protected.txt` y
   `excluded.txt` (esta última, para quitar los packs en Skyve), y la barra de secciones y el filtro siempre visibles.

@@ -325,7 +325,7 @@ def types_text(types):
 def link(r):
     name = html.escape(r["name"])
     if r["pdxId"]:
-        return f'<a href="https://mods.paradoxplaza.com/mods/{html.escape(str(r["pdxId"]))}/Windows">{name}</a>'
+        return f'<a href="https://mods.paradoxplaza.com/mods/{html.escape(str(r["pdxId"]))}/Windows" target="_blank" rel="noopener">{name}</a>'
     return name
 
 
