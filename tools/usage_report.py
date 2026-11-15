@@ -236,8 +236,8 @@ td.id,.id,.ex,.why{font-family:var(--mono);font-size:12px;color:var(--muted)}
 td.act{white-space:nowrap}
 .pack{display:flex;gap:10px;align-items:center;min-width:220px}
 .thumb{flex:none;width:96px;height:54px;border-radius:6px;object-fit:cover;background:var(--line)}
-img.thumb{cursor:zoom-in;transition:transform .15s}
-img.thumb:hover{transform:scale(3);transform-origin:left center;position:relative;z-index:3;box-shadow:0 6px 24px rgba(0,0,0,.35)}
+img.thumb{cursor:zoom-in}
+#preview{position:fixed;z-index:10;width:384px;height:216px;object-fit:cover;border-radius:10px;pointer-events:none;box-shadow:0 8px 30px rgba(0,0,0,.4);background:var(--line)}
 tbody:not(:empty)+tbody.none{display:none}
 a{color:var(--accent)}a:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 input{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--fg);flex:1 1 220px;max-width:360px}
@@ -315,6 +315,15 @@ var a=document.createElement('a');a.href=URL.createObjectURL(new Blob([body],{ty
 document.body.appendChild(a);a.click();a.remove();done();}
 document.getElementById('save-protected').addEventListener('click',function(){save('protected');});
 document.getElementById('save-excluded').addEventListener('click',function(){save('excluded');});
+var preview=document.getElementById('preview');
+document.addEventListener('error',function(e){var t=e.target;if(t.classList&&t.classList.contains('thumb'))t.style.visibility='hidden';},true);
+document.addEventListener('mouseover',function(e){var t=e.target;if(!(t.classList&&t.classList.contains('thumb')&&t.tagName==='IMG'))return;
+var r=t.getBoundingClientRect(),w=384,h=216,left=r.right+12,top=r.top+r.height/2-h/2;
+if(left+w>window.innerWidth-8)left=Math.max(8,r.left-w-12);
+top=Math.min(Math.max(8,top),window.innerHeight-h-8);
+preview.src=t.currentSrc||t.src;preview.style.left=left+'px';preview.style.top=top+'px';preview.hidden=false;});
+document.addEventListener('mouseout',function(e){if(e.target.classList&&e.target.classList.contains('thumb'))preview.hidden=true;});
+window.addEventListener('scroll',function(){preview.hidden=true;},{passive:true});
 document.getElementById('q').addEventListener('input',function(e){var q=e.target.value.toLowerCase();
 document.querySelectorAll('tr[data-s]').forEach(function(r){r.hidden=q&&r.dataset.s.indexOf(q)<0;});});
 })();
@@ -427,6 +436,7 @@ def write_html(args, rows, usage, cities, gone):
 <button type="button" class="save" id="save-excluded">Save excluded.txt</button>
 <span class="dirty" id="dirty" hidden></span></div>
 </div></nav>
+<img id="preview" alt="" hidden referrerpolicy="no-referrer">
 <div class="wrap">
 <div class="lead"><h1>Asset usage report</h1>
 <p>Usage {since} in {counted} counted {city_word}. Generated from inventory.json and usage.json. This report only lists packs; nothing is removed.</p>
