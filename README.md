@@ -32,7 +32,8 @@ unattributed. A pack whose only unseen type is its asset pack filter still count
 Each candidate or review row has Protect and Exclude buttons. The browser remembers the choices until you save them
 with the buttons in the top bar as `protected.txt` and `excluded.txt` in `ModsData/asset-usage`; the next report reads
 both. Protected packs are never candidates, and `excluded.txt` is the list of packs to turn off in Skyve. Both files
-take one pack id or Paradox Mods id per line; text after `#` is ignored.
+take one pack id or Paradox Mods id per line; text after `#` is ignored. Saving keeps the lines and comments the report has no row for. If the
+browser downloads the file instead of asking where to save it, move it from Downloads into that folder.
 
 Only cities loaded with the mod count, so load each city you play at least once before trusting the candidates.
 
