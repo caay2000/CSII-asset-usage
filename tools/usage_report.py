@@ -124,6 +124,20 @@ def list_state(path, rows):
     return {"ids": ids, "keep": keep}
 
 
+PACK_PREFIX = "pdx:"
+
+
+def link_dependencies(rows, decisions, packs):
+    by_id = {r["id"]: r for r in rows}
+    for r in rows:
+        for dep in r["deps"]:
+            by_id[dep]["needed_by"].append(r["id"])
+    for r in rows:
+        if r["base"] == "candidate" and any(by_id[d]["base"] == "used" for d in r["needed_by"]):
+            r["base"] = "manual"
+            r["status"] = decision_for(r["id"], packs[r["id"]], decisions) or "manual"
+
+
 def read_ids(path):
     if not os.path.exists(path):
         return set()
@@ -176,12 +190,15 @@ def build(args):
         name = item.get("displayName") or pack.get("name") or pack_id
         thumb = item.get("thumbnailPath") or ""
         base, status = classify(pack_id, pack, s, decisions)
+        deps = [f"{PACK_PREFIX}{d['id']}" for d in item.get("dependencies") or [] if d.get("type") == "MOD" and d.get("id")]
         size = pack_size(args.game_data, pack) if base in ("candidate", "manual", "used") and not args.no_sizes else 0
         rows.append({
             "id": pack_id, "name": name, "source": pack["source"], "pdxId": pack.get("pdxId") or "", "thumb": thumb if thumb.startswith("https://") else "",
             "prefabs": pack["prefabCount"], "direct": s["direct"], "indirect": s["indirect"], "status": status,
             "base": base, "listed": decision_for(pack_id, pack, decisions), "size": size, "types": pack.get("types", {}), "examples": s["examples"],
+            "deps": [d for d in deps if d in inventory["packs"] and d != pack_id], "needed_by": [],
         })
+    link_dependencies(rows, decisions, inventory["packs"])
 
     write_html(args, rows, usage, cities, gone)
     write_candidates(args, rows)
@@ -189,7 +206,7 @@ def build(args):
 
 STATUSES = [
     ("candidate", "Candidates", "Nothing in these packs is used in the counted cities, directly or through another prefab. Removing a growables pack reduces zone variety."),
-    ("manual", "Review by hand", "Unused, but they bring things a city scan cannot see: zones, themes, maps, UI or styles."),
+    ("manual", "Review by hand", "Unused, but they bring things a city scan cannot see (zones, themes, maps, UI or styles), or a used pack depends on them."),
     ("excluded", "Excluded", "Marked to remove. Save excluded.txt and use it to turn these packs off in Skyve."),
     ("protected", "Protected", "Marked to keep, so never candidates. Saved in protected.txt."),
     ("used", "Used", "At least one prefab is in a counted city, directly or through another prefab."),
@@ -232,6 +249,8 @@ th,td{padding:7px 12px;text-align:left;vertical-align:top;border-bottom:1px soli
 tr:last-child td{border-bottom:0}
 th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;white-space:nowrap}
 td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.needed{font-size:12px;color:var(--muted)}
+.needed.conflict{color:var(--excl);font-weight:600}
 td.id,.id,.ex,.why{font-family:var(--mono);font-size:12px;color:var(--muted)}
 td.act{white-space:nowrap}
 .pack{display:flex;gap:10px;align-items:center;min-width:220px}
@@ -286,6 +305,12 @@ Object.keys(counts).forEach(function(k){document.querySelectorAll('[data-count="
 var big=document.getElementById('saving');if(big)big.textContent=human(saving);
 var cand=document.getElementById('cand-n');if(cand)cand.textContent=counts.candidate;
 var cp=document.getElementById('cand-p');if(cp)cp.textContent=prefabs;
+var conflicts=0;
+rows().forEach(function(tr){var n=tr.querySelector('.needed');if(!n)return;
+var bad=decision(tr.dataset.id)==='excluded'&&n.dataset.needed.split(' ').some(function(id){return !known.has(id)||decision(id)!=='excluded';});
+n.classList.toggle('conflict',bad);if(bad)conflicts++;});
+var cw=document.getElementById('conflicts');cw.hidden=!conflicts;
+cw.textContent=conflicts+(conflicts===1?' excluded pack is':' excluded packs are')+' needed by packs you keep';
 var pending=Object.keys(overrides).length;
 document.getElementById('dirty').hidden=!pending;
 document.getElementById('dirty').textContent=pending+(pending===1?' change':' changes')+' not saved to the files yet';}
@@ -353,7 +378,15 @@ def head_row(used):
     return "<thead><tr>" + "".join(f"<th>{h}</th>" for h in head) + "</tr></thead>"
 
 
-def row_html(r, used):
+def needed_html(r, by_id):
+    if not r["needed_by"]:
+        return ""
+    names = ", ".join(sorted(by_id[i]["name"] for i in r["needed_by"]))
+    ids = " ".join(r["needed_by"])
+    return f"<div class='needed' data-needed='{html.escape(ids)}'>needed by {html.escape(names)}</div>"
+
+
+def row_html(r, used, by_id):
     search = html.escape(f"{r['name']} {r['id']}".lower())
     cells = [f'<td><div class="pack">{thumb(r)}<span>{link(r)}</span></div></td>', f'<span class="id">{html.escape(r["id"])}</span>', f'<td class="num">{r["prefabs"]}</td>',
              f'<td class="num">{human(r["size"]) if r["size"] else "—"}</td>']
@@ -363,7 +396,7 @@ def row_html(r, used):
     else:
         reasons = manual_reasons(r["types"]) if r["base"] == "manual" else []
         why = f"<div class='why'>brings {html.escape(', '.join(t.replace('Prefab', '') for t in reasons))}</div>" if reasons else ""
-        cells += [f"<td>{types_text(r['types'])}{why}</td>",
+        cells += [f"<td>{types_text(r['types'])}{why}{needed_html(r, by_id)}</td>",
                   '<td class="act"><button type="button" class="keep" aria-pressed="false">Protect</button> '
                   '<button type="button" class="drop" aria-pressed="false">Exclude</button></td>']
     tds = "".join(c if c.startswith("<td") else f"<td>{c}</td>" for c in cells)
@@ -373,12 +406,12 @@ def row_html(r, used):
             f'data-size="{r["size"]}" data-prefabs="{r["prefabs"]}">{tds}</tr>')
 
 
-def table(key, rows):
+def table(key, rows, by_id):
     used = key not in DECIDABLE
     if used and not rows:
         return '<p class="empty">None.</p>'
     cols = 7 if used else 6
-    body = "".join(row_html(r, used) for r in rows)
+    body = "".join(row_html(r, used, by_id) for r in rows)
     return (f"<div class='scroll'><table>{head_row(used)}<tbody class='list'>{body}</tbody>"
             f"<tbody class='none'><tr><td colspan='{cols}' class='empty'>None.</td></tr></tbody></table></div>")
 
@@ -390,6 +423,7 @@ def lists_json(args, rows):
 
 
 def write_html(args, rows, usage, cities, gone):
+    by_id = {r["id"]: r for r in rows}
     by = defaultdict(list)
     for r in rows:
         by[r["status"]].append(r)
@@ -411,7 +445,7 @@ def write_html(args, rows, usage, cities, gone):
     )
     sections = []
     for key, title, note in STATUSES:
-        sections.append(f'<section id="{key}"><h2>{title} <span class="n" data-count="{key}">{len(by[key])}</span></h2><p>{note}</p>{table(key, by[key])}</section>')
+        sections.append(f'<section id="{key}"><h2>{title} <span class="n" data-count="{key}">{len(by[key])}</span></h2><p>{note}</p>{table(key, by[key], by_id)}</section>')
     listed_used = sorted(r["name"] for r in rows if r["listed"] == "excluded" and r["base"] == "used")
     warning = (f"<section><h2>Excluded but used <span class='n'>{len(listed_used)}</span></h2>"
                f"<p>Listed in excluded.txt, but a counted city uses them, so they stay under Used: "
@@ -434,7 +468,8 @@ def write_html(args, rows, usage, cities, gone):
 <div class="row"><input id="q" type="search" aria-label="Filter packs by name or id" placeholder="Filter packs by name or id">
 <button type="button" class="save" id="save-protected">Save protected.txt</button>
 <button type="button" class="save" id="save-excluded">Save excluded.txt</button>
-<span class="dirty" id="dirty" hidden></span></div>
+<span class="dirty" id="dirty" hidden></span>
+<a class="dirty" id="conflicts" href="#excluded" hidden></a></div>
 </div></nav>
 <img id="preview" alt="" hidden referrerpolicy="no-referrer">
 <div class="wrap">

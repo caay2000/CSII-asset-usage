@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.4 (2026-11-15)
+- Informe: dependencias entre packs, sacadas de la caché de mods del juego.
+  - Cada pack indica qué packs lo necesitan.
+  - Un candidato del que depende un pack usado pasa a revisar a mano.
+  - Se avisa cuando un pack excluido lo necesita otro que se conserva.
+
 ## 0.1.3 (2026-11-15)
 - Informe: miniatura de cada pack de Paradox Mods (la portada de la caché de mods del juego), que se amplía al pasar el
   ratón. El nombre del pack sale también de esa caché.

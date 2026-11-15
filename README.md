@@ -28,7 +28,10 @@ python3 tools/usage_report.py [--cities id1,id2] [--since 2026-11-14] [--no-size
 It writes `report.html` and `candidates.csv` next to the data. Packs are split into candidates (nothing used),
 review by hand (unused but bring zones, themes, UI or other types the scan cannot see), excluded, protected, used and
 unattributed. A pack whose only unseen type is its asset pack filter still counts as a candidate. Paradox Mods packs show their
-cover from the game's mods cache (`.cache/Mods/pdx_mods_cache.json`), loaded from Paradox's servers when the report opens.
+cover from the game's mods cache (`.cache/Mods/pdx_mods_cache.json`), loaded from Paradox's servers when the report opens. The same cache gives each pack's dependencies:
+- each row says which packs need it;
+- a candidate that a used pack depends on goes to review by hand;
+- the top bar warns when an excluded pack is needed by a pack you keep.
 
 Each candidate or review row has Protect and Exclude buttons. The browser remembers the choices until you save them
 with the buttons in the top bar as `protected.txt` and `excluded.txt` in `ModsData/asset-usage`; the next report reads
