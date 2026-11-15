@@ -132,10 +132,15 @@ def link_dependencies(rows, decisions, packs):
     for r in rows:
         for dep in r["deps"]:
             by_id[dep]["needed_by"].append(r["id"])
-    for r in rows:
-        if r["base"] == "candidate" and any(by_id[d]["base"] == "used" for d in r["needed_by"]):
-            r["base"] = "manual"
-            r["status"] = decision_for(r["id"], packs[r["id"]], decisions) or "manual"
+    kept = {r["id"] for r in rows if r["base"] == "used"}
+    pending = [by_id[d] for i in kept for d in by_id[i]["deps"]]
+    while pending:
+        r = pending.pop()
+        if r["base"] != "candidate":
+            continue
+        r["base"] = "manual"
+        r["status"] = decision_for(r["id"], packs[r["id"]], decisions) or "manual"
+        pending.extend(by_id[d] for d in r["deps"])
 
 
 def read_ids(path):
@@ -196,7 +201,7 @@ def build(args):
             "id": pack_id, "name": name, "source": pack["source"], "pdxId": pack.get("pdxId") or "", "thumb": thumb if thumb.startswith("https://") else "",
             "prefabs": pack["prefabCount"], "direct": s["direct"], "indirect": s["indirect"], "status": status,
             "base": base, "listed": decision_for(pack_id, pack, decisions), "size": size, "types": pack.get("types", {}), "examples": s["examples"],
-            "deps": [d for d in deps if d in inventory["packs"] and d != pack_id], "needed_by": [],
+            "deps": sorted({d for d in deps if d in inventory["packs"] and d != pack_id}), "needed_by": [],
         })
     link_dependencies(rows, decisions, inventory["packs"])
 
