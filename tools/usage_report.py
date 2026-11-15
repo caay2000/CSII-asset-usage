@@ -140,17 +140,64 @@ def build(args):
     write_candidates(args, rows)
 
 
-def section(title, note, rows, columns):
-    if not rows:
-        return f"<h2>{html.escape(title)} (0)</h2>"
-    head = "".join(f"<th>{html.escape(c)}</th>" for c, _ in columns)
-    body = "\n".join("<tr>" + "".join(f"<td>{cell(r)}</td>" for _, cell in columns) + "</tr>" for r in rows)
-    return f"<h2>{html.escape(title)} ({len(rows)})</h2><p>{note}</p><table><tr>{head}</tr>{body}</table>"
+STATUSES = [
+    ("candidate", "Candidates", "Nothing in these packs is used in the counted cities, directly or through another prefab. Removing a growables pack reduces zone variety."),
+    ("manual", "Review by hand", "Unused, but they bring things a city scan cannot see: zones, themes, maps, asset packs, UI or styles."),
+    ("protected", "Protected", "Listed in protected.txt, so never candidates."),
+    ("used", "Used", "At least one prefab is in a counted city, directly or through another prefab."),
+    ("unattributed", "Unattributed", "Prefabs created at runtime (Extra Assets Importer, code mods) or of unknown origin. Never candidates."),
+]
+
+STYLE = """
+:root{--bg:#f6f7f8;--panel:#ffffff;--fg:#1d2329;--muted:#5d6873;--line:#dde2e7;--accent:#1f6f8b;
+--cand:#a34a12;--cand-bg:#fbeee4;--manual:#7a5c00;--manual-bg:#fbf3d9;--used:#2d6a3e;--used-bg:#e5f3e8;
+--prot:#4b4f9c;--prot-bg:#ebecfa;--un:#5d6873;--un-bg:#eceff2;
+--sans:"Inter",system-ui,sans-serif;--head:"Space Grotesk","Inter",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14181c;--panel:#1b2026;--fg:#e4e8ec;--muted:#98a3ae;--line:#2c333b;--accent:#5fb3cf;
+--cand:#f0a070;--cand-bg:#3a2518;--manual:#e2c25a;--manual-bg:#342c12;--used:#7fcf94;--used-bg:#18301f;--prot:#a9adf2;--prot-bg:#24264a;--un:#98a3ae;--un-bg:#232a31;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#14181c;--panel:#1b2026;--fg:#e4e8ec;--muted:#98a3ae;--line:#2c333b;--accent:#5fb3cf;
+--cand:#f0a070;--cand-bg:#3a2518;--manual:#e2c25a;--manual-bg:#342c12;--used:#7fcf94;--used-bg:#18301f;--prot:#a9adf2;--prot-bg:#24264a;--un:#98a3ae;--un-bg:#232a31;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:14px;line-height:1.5}
+.wrap{max-width:1120px;margin:0 auto;padding-block:32px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:28px}
+h1,h2{font-family:var(--head);text-wrap:balance;margin:0}
+h1{font-size:28px}h2{font-size:19px;display:flex;gap:10px;align-items:baseline}
+h2 .n{font-family:var(--mono);font-size:13px;color:var(--muted)}
+p{margin:0;max-width:70ch;color:var(--muted)}
+.lead{display:grid;gap:6px}
+.saving{display:flex;flex-wrap:wrap;gap:12px 32px;align-items:baseline;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px 20px}
+.saving .big{font-family:var(--head);font-size:34px;font-weight:600;color:var(--cand);font-variant-numeric:tabular-nums}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.tile{display:grid;gap:2px;padding:12px 14px;border-radius:8px;background:var(--panel);border:1px solid var(--line);text-decoration:none;color:inherit}
+.tile b{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums}
+.tile span{font-size:12px;color:var(--muted)}
+.pill{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;letter-spacing:.02em}
+.candidate{color:var(--cand);background:var(--cand-bg)}.manual{color:var(--manual);background:var(--manual-bg)}
+.used{color:var(--used);background:var(--used-bg)}.protected{color:var(--prot);background:var(--prot-bg)}.unattributed{color:var(--un);background:var(--un-bg)}
+section{display:grid;gap:10px;min-width:0}
+.scroll{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 12px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:0}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;white-space:nowrap}
+td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+td.id,.ex{font-family:var(--mono);font-size:12px;color:var(--muted)}
+a{color:var(--accent)}a:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input{font:inherit;padding:8px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--fg);width:100%;max-width:360px}
+.empty{color:var(--muted);font-style:italic}
+"""
+
+COUNTED = '<span class="pill used">counted</span>'
+LEFT_OUT = '<span class="pill unattributed">left out</span>'
+
+SCRIPT = """
+document.getElementById('q').addEventListener('input',function(e){var q=e.target.value.toLowerCase();
+document.querySelectorAll('tr[data-s]').forEach(function(r){r.hidden=q&&r.dataset.s.indexOf(q)<0;});});
+"""
 
 
 def types_text(types):
-    top = sorted(types.items(), key=lambda t: -t[1])[:4]
-    return html.escape(", ".join(f"{t} {n}" for t, n in top))
+    top = sorted(types.items(), key=lambda t: -t[1])[:3]
+    return html.escape(", ".join(f"{t.replace('Prefab', '')} {n}" for t, n in top))
 
 
 def link(r):
@@ -160,6 +207,24 @@ def link(r):
     return name
 
 
+def table(rows, used):
+    head = ["Pack", "Id", "Prefabs", "Size"] + (["Direct", "Indirect", "Examples"] if used else ["Types"])
+    out = ["<div class='scroll'><table><tr>" + "".join(f"<th>{h}</th>" for h in head) + "</tr>"]
+    for r in rows:
+        search = html.escape(f"{r['name']} {r['id']}".lower())
+        cells = [link(r), f'<span class="id">{html.escape(r["id"])}</span>', f'<td class="num">{r["prefabs"]}</td>',
+                 f'<td class="num">{human(r["size"]) if r["size"] else "—"}</td>']
+        if used:
+            cells += [f'<td class="num">{r["direct"]}</td>', f'<td class="num">{r["indirect"]}</td>',
+                      "<td class='ex'>" + "<br>".join(html.escape(e) for e in r["examples"]) + "</td>"]
+        else:
+            cells += [f"<td>{types_text(r['types'])}</td>"]
+        tds = "".join(c if c.startswith("<td") else f"<td>{c}</td>" for c in cells)
+        out.append(f'<tr data-s="{search}">{tds}</tr>')
+    out.append("</table></div>")
+    return "".join(out)
+
+
 def write_html(args, rows, usage, cities, gone):
     by = defaultdict(list)
     for r in rows:
@@ -167,40 +232,46 @@ def write_html(args, rows, usage, cities, gone):
     for key in by:
         by[key].sort(key=lambda r: (-r["size"], -r["prefabs"]))
 
+    candidates = by["candidate"]
+    saving = sum(r["size"] for r in candidates)
+    saving_prefabs = sum(r["prefabs"] for r in candidates)
+    tiles = "".join(
+        f'<a class="tile" href="#{key}"><b>{len(by[key])}</b><span class="pill {key}">{title}</span></a>'
+        for key, title, _ in STATUSES
+    )
     city_rows = "".join(
-        f"<tr><td>{html.escape(c.get('name') or '')}</td><td>{html.escape(cid)}</td><td>{c.get('firstSeen','')}</td>"
-        f"<td>{c.get('lastSeen','')}</td><td>{'yes' if not cities or cid in cities else 'no'}</td></tr>"
+        f"<tr><td>{html.escape(c.get('name') or '')}</td><td class='id'>{html.escape(cid)}</td>"
+        f"<td class='num'>{c.get('firstSeen', '')}</td><td class='num'>{c.get('lastSeen', '')}</td>"
+        f"<td>{COUNTED if not cities or cid in cities else LEFT_OUT}</td></tr>"
         for cid, c in usage.get("cities", {}).items()
     )
-    base = [("Pack", link), ("Id", lambda r: html.escape(r["id"])), ("Prefabs", lambda r: r["prefabs"]),
-            ("Size", lambda r: human(r["size"]) if r["size"] else ""), ("Types", lambda r: types_text(r["types"]))]
-    used_cols = base[:3] + [("Direct", lambda r: r["direct"]), ("Indirect", lambda r: r["indirect"]),
-                            ("Examples", lambda r: "<br>".join(html.escape(e) for e in r["examples"]))]
-    total_candidates = sum(r["size"] for r in by["candidate"])
-    summary = ", ".join(f"{k}: {len(v)}" for k, v in sorted(by.items()))
-    gone_html = "".join(f"<li>{html.escape(p)}: {n} used prefabs</li>" for p, n in sorted(gone.items()))
+    sections = []
+    for key, title, note in STATUSES:
+        body = table(by[key], key == "used") if by[key] else '<p class="empty">None.</p>'
+        sections.append(f'<section id="{key}"><h2>{title} <span class="n">{len(by[key])}</span></h2><p>{note}</p>{body}</section>')
+    gone_rows = "".join(f"<li><span class='id'>{html.escape(p)}</span>: {n} used prefabs</li>" for p, n in sorted(gone.items()))
+    since = "all time" if args.since == "0000-00-00" else "since " + html.escape(args.since)
 
-    page = f"""<!doctype html><html><head><meta charset="utf-8"><title>Asset usage report</title>
-<style>
-body{{font-family:system-ui,sans-serif;margin:24px;color:#222;background:#fff}}
-table{{border-collapse:collapse;margin-bottom:24px;font-size:13px}}
-td,th{{border:1px solid #ccc;padding:4px 8px;text-align:left;vertical-align:top}}
-th{{background:#f0f0f0}} h2{{margin-top:32px}} p{{max-width:900px}}
-</style></head><body>
-<h1>Asset usage report</h1>
-<p>Usage since {html.escape(args.since)}. Packs: {summary}. Candidates add up to {human(total_candidates)}.</p>
-<h2>Cities</h2><table><tr><th>Name</th><th>Id</th><th>First seen</th><th>Last seen</th><th>Counted</th></tr>{city_rows}</table>
-<p>Only cities loaded with the mod count. A pack used only in a city you have not loaded since installing the mod will show as a candidate.</p>
-{section("Candidates", "No prefab of these packs is used, directly or through another prefab, in the counted cities. Removing a pack of growables reduces zone variety.", by["candidate"], base)}
-{section("Review by hand", "Unused, but they bring types the scan cannot see in a city (zones, themes, asset packs, UI, styles...).", by["manual"], base)}
-{section("Protected", "Listed in protected.txt.", by["protected"], base)}
-{section("Used", "", by["used"], used_cols)}
-{section("Unattributed", "Prefabs created at runtime (Extra Assets Importer, code mods) or with an unknown origin. Never candidates.", by["unattributed"], base)}
-<h2>Used packs not loaded now</h2><ul>{gone_html or "<li>none</li>"}</ul>
-</body></html>"""
+    page = f"""<title>Asset Usage Report</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;600&family=Space+Grotesk:wght@600&display=swap">
+<style>{STYLE}</style>
+<div class="wrap">
+<div class="lead"><h1>Asset usage report</h1>
+<p>Usage {since} in {len(usage.get("cities", {}))} cities. Generated from inventory.json and usage.json. This report only lists packs; nothing is removed.</p></div>
+<div class="saving"><span class="big">{human(saving)}</span><p>on disk across {len(candidates)} candidate packs ({saving_prefabs} prefabs) that no counted city uses.</p></div>
+<div class="tiles">{tiles}</div>
+<section><h2>Cities <span class="n">{len(usage.get("cities", {}))}</span></h2>
+<p>Only cities loaded with the mod count. A pack used only in a city you have not loaded since installing the mod shows up as a candidate.</p>
+<div class="scroll"><table><tr><th>Name</th><th>Id</th><th>First seen</th><th>Last seen</th><th></th></tr>{city_rows}</table></div></section>
+<label for="q"><input id="q" type="search" placeholder="Filter packs by name or id"></label>
+{"".join(sections)}
+<section><h2>Used packs not loaded now <span class="n">{len(gone)}</span></h2><ul>{gone_rows or '<li class="empty">None.</li>'}</ul></section>
+</div>
+<script>{SCRIPT}</script>"""
     out = os.path.join(args.out, "report.html")
     with open(out, "w", encoding="utf-8") as f:
-        f.write(page)
+        f.write("<!doctype html><html lang='en'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'></head><body>" + page + "</body></html>")
     print(f"Report: {out}")
 
 
