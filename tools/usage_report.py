@@ -21,11 +21,11 @@ def load_json(path):
         return json.load(f)
 
 
-def pdx_names(game_data):
+def pdx_items(game_data):
     path = os.path.join(game_data, ".cache", "Mods", "pdx_mods_cache.json")
     if not os.path.exists(path):
         return {}
-    return {str(item.get("id")): item.get("displayName") for item in load_json(path).get("items", [])}
+    return {str(item.get("id")): item for item in load_json(path).get("items", [])}
 
 
 def folder_size(path):
@@ -146,7 +146,7 @@ def build(args):
     decisions = {i: "protected" for i in read_ids(os.path.join(data, "protected.txt"))}
     decisions.update({i: "excluded" for i in read_ids(os.path.join(data, "excluded.txt"))})
     cities = set(args.cities.split(",")) if args.cities else set()
-    names = pdx_names(args.game_data)
+    items = pdx_items(args.game_data)
     used = used_prefabs(usage, cities, args.since)
 
     stats = defaultdict(lambda: {"direct": 0, "indirect": 0, "examples": []})
@@ -172,13 +172,13 @@ def build(args):
     rows = []
     for pack_id, pack in inventory["packs"].items():
         s = stats[pack_id]
-        name = pack.get("name") or names.get(pack.get("pdxId") or "") or pack_id
-        if pack.get("pdxId") and names.get(pack["pdxId"]):
-            name = names[pack["pdxId"]]
+        item = items.get(pack.get("pdxId") or "", {})
+        name = item.get("displayName") or pack.get("name") or pack_id
+        thumb = item.get("thumbnailPath") or ""
         base, status = classify(pack_id, pack, s, decisions)
         size = pack_size(args.game_data, pack) if base in ("candidate", "manual", "used") and not args.no_sizes else 0
         rows.append({
-            "id": pack_id, "name": name, "source": pack["source"], "pdxId": pack.get("pdxId") or "",
+            "id": pack_id, "name": name, "source": pack["source"], "pdxId": pack.get("pdxId") or "", "thumb": thumb if thumb.startswith("https://") else "",
             "prefabs": pack["prefabCount"], "direct": s["direct"], "indirect": s["indirect"], "status": status,
             "base": base, "listed": decision_for(pack_id, pack, decisions), "size": size, "types": pack.get("types", {}), "examples": s["examples"],
         })
@@ -234,6 +234,10 @@ th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--mute
 td.num{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 td.id,.id,.ex,.why{font-family:var(--mono);font-size:12px;color:var(--muted)}
 td.act{white-space:nowrap}
+.pack{display:flex;gap:10px;align-items:center;min-width:220px}
+.thumb{flex:none;width:96px;height:54px;border-radius:6px;object-fit:cover;background:var(--line)}
+img.thumb{cursor:zoom-in;transition:transform .15s}
+img.thumb:hover{transform:scale(3);transform-origin:left center;position:relative;z-index:3;box-shadow:0 6px 24px rgba(0,0,0,.35)}
 tbody:not(:empty)+tbody.none{display:none}
 a{color:var(--accent)}a:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 input{font:inherit;padding:6px 12px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--fg);flex:1 1 220px;max-width:360px}
@@ -322,6 +326,12 @@ def types_text(types):
     return html.escape(", ".join(f"{t.replace('Prefab', '')} {n}" for t, n in top))
 
 
+def thumb(r):
+    if not r["thumb"]:
+        return '<span class="thumb"></span>'
+    return f'<img class="thumb" src="{html.escape(r["thumb"])}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">'
+
+
 def link(r):
     name = html.escape(r["name"])
     if r["pdxId"]:
@@ -336,7 +346,7 @@ def head_row(used):
 
 def row_html(r, used):
     search = html.escape(f"{r['name']} {r['id']}".lower())
-    cells = [link(r), f'<span class="id">{html.escape(r["id"])}</span>', f'<td class="num">{r["prefabs"]}</td>',
+    cells = [f'<td><div class="pack">{thumb(r)}<span>{link(r)}</span></div></td>', f'<span class="id">{html.escape(r["id"])}</span>', f'<td class="num">{r["prefabs"]}</td>',
              f'<td class="num">{human(r["size"]) if r["size"] else "—"}</td>']
     if used:
         cells += [f'<td class="num">{r["direct"]}</td>', f'<td class="num">{r["indirect"]}</td>',

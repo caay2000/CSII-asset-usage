@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.3 (2026-11-15)
+- Informe: miniatura de cada pack de Paradox Mods (la portada de la caché de mods del juego), que se amplía al pasar el
+  ratón. El nombre del pack sale también de esa caché.
+
 ## 0.1.2 (2026-11-15)
 - Informe: los enlaces a Paradox Mods se abren en una pestaña nueva.
 
