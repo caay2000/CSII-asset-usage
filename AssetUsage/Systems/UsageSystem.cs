@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using AssetUsage.Core;
 using Colossal.Serialization.Entities;
 using Game;
@@ -18,6 +19,7 @@ namespace AssetUsage.Systems
     public partial class UsageSystem : GameSystemBase
     {
         static readonly TimeSpan FlushEvery = TimeSpan.FromMinutes(5);
+        static readonly TimeSpan BuildBudget = TimeSpan.FromMilliseconds(4);
 
         sealed class Session
         {
@@ -36,6 +38,7 @@ namespace AssetUsage.Systems
         EntityQuery createdQuery;
         UsageLedger ledger;
         LoadedPrefabs loaded;
+        Task<Inventory> saved;
         Session session;
         DateTime nextFlush;
         int createdFrames;
@@ -57,12 +60,13 @@ namespace AssetUsage.Systems
                 None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>(), ComponentType.ReadOnly<PrefabData>() },
             });
             ledger = Storage.LoadLedger();
+            saved = Storage.LoadInventoryAsync();
             GameManager.instance.onGameSaveLoad += OnSaved;
         }
 
         protected override void OnDestroy()
         {
-            FlushNow("destroy");
+            FlushNow("destroy", true);
             if (GameManager.instance != null)
             {
                 GameManager.instance.onGameSaveLoad -= OnSaved;
@@ -75,7 +79,7 @@ namespace AssetUsage.Systems
         protected override void OnGamePreload(Purpose purpose, GameMode mode)
         {
             base.OnGamePreload(purpose, mode);
-            FlushNow("leaving city");
+            FlushNow("leaving city", true);
             session = null;
             indexOf.Clear();
         }
@@ -111,6 +115,8 @@ namespace AssetUsage.Systems
 
             try
             {
+                BuildInventory();
+
                 if (!createdQuery.IsEmptyIgnoreFilter)
                 {
                     Collect(createdQuery);
@@ -130,13 +136,24 @@ namespace AssetUsage.Systems
             }
         }
 
-        public void FlushNow(string reason)
+        public void FlushNow(string reason, bool finishInventory = false)
         {
             nextFlush = DateTime.UtcNow + FlushEvery;
             var current = session;
             if (current == null || loaded == null || (current.Direct.Count == current.Flushed && Storage.LastWriteSucceeded))
             {
                 return;
+            }
+
+            if (!loaded.Ready)
+            {
+                if (!finishInventory)
+                {
+                    return;
+                }
+
+                loaded.Finish();
+                SaveInventory();
             }
 
             var direct = current.Direct.Select(loaded.Key).Where(k => k != null).ToList();
@@ -162,8 +179,39 @@ namespace AssetUsage.Systems
                 return;
             }
 
-            loaded = LoadedPrefabs.Read(prefabSystem);
+            loaded = LoadedPrefabs.Snapshot(prefabSystem);
+            if (saved.IsCompleted && loaded.TryReuse(saved.Result))
+            {
+                return;
+            }
+
+            Mod.Log.Info(saved.IsCompleted ? "The loaded prefabs changed; building the inventory over the next frames." : "The saved inventory is still being read; building the inventory over the next frames.");
+        }
+
+        void BuildInventory()
+        {
+            if (loaded == null || loaded.Ready)
+            {
+                return;
+            }
+
+            if (saved.IsCompleted && loaded.TryReuse(saved.Result))
+            {
+                FlushNow("inventory reused");
+                return;
+            }
+
+            if (loaded.Step(BuildBudget))
+            {
+                SaveInventory();
+                FlushNow("inventory ready");
+            }
+        }
+
+        void SaveInventory()
+        {
             var inventory = loaded.Inventory;
+            saved = Task.FromResult(inventory);
             Storage.Enqueue("inventory", () => inventory, Storage.InventoryPath);
         }
 

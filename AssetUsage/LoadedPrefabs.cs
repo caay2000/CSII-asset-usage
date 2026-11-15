@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using AssetUsage.Core;
@@ -12,69 +14,112 @@ namespace AssetUsage
     {
         static readonly FieldInfo PrefabsField = typeof(PrefabSystem).GetField("m_Prefabs", BindingFlags.Instance | BindingFlags.NonPublic);
 
-        readonly List<PrefabBase> prefabs;
+        readonly PrefabBase[] prefabs;
         readonly string[] keys;
+        readonly List<ComponentBase> components = new List<ComponentBase>();
+        readonly List<PrefabBase> dependencies = new List<PrefabBase>();
+        readonly Stopwatch working = new Stopwatch();
+        Inventory building;
+        int next;
+        int failed;
 
-        LoadedPrefabs(List<PrefabBase> prefabs, Inventory inventory, string[] keys)
+        LoadedPrefabs(PrefabBase[] prefabs, string[] keys)
         {
             this.prefabs = prefabs;
             this.keys = keys;
-            Inventory = inventory;
+            Fingerprint = InventoryFingerprint.Of(keys);
         }
 
-        public Inventory Inventory { get; }
+        public Inventory Inventory { get; private set; }
+
+        public bool Ready => Inventory != null;
+
+        public string Fingerprint { get; }
 
         public int Count => keys.Length;
 
         public static bool IsStale(LoadedPrefabs current, PrefabSystem system) => current == null || All(system).Count != current.Count;
 
-        public string Key(int index)
-        {
-            if (index >= 0 && index < keys.Length)
-            {
-                return keys[index];
-            }
+        public string Key(int index) => index >= 0 && index < keys.Length ? keys[index] : null;
 
-            return index >= 0 && index < prefabs.Count && prefabs[index] != null ? KeyOf(prefabs[index]) : null;
-        }
-
-        public static LoadedPrefabs Read(PrefabSystem system)
+        public static LoadedPrefabs Snapshot(PrefabSystem system)
         {
             var started = DateTime.UtcNow;
-            var all = All(system);
-            var inventory = new Inventory { GeneratedAt = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss") };
-            var keys = new string[all.Count];
-            var components = new List<ComponentBase>();
-            var dependencies = new List<PrefabBase>();
-            int failed = 0;
-
-            for (int i = 0; i < all.Count; i++)
+            var prefabs = All(system).ToArray();
+            var keys = new string[prefabs.Length];
+            for (int i = 0; i < prefabs.Length; i++)
             {
-                var prefab = all[i];
-                if (prefab == null)
-                {
-                    continue;
-                }
-
-                keys[i] = KeyOf(prefab);
-                try
-                {
-                    inventory.Add(prefab.GetType().Name, prefab.name, PackResolver.Resolve(OriginOf(prefab)), Dependencies(prefab, components, dependencies));
-                }
-                catch (Exception e)
-                {
-                    if (failed++ < 10)
-                    {
-                        Mod.Log.Warn($"Could not read {keys[i]}: {e.Message}");
-                    }
-
-                    inventory.Add(prefab.GetType().Name, prefab.name, new PackRef { Id = PackSource.Unknown + ":error", Source = PackSource.Unknown, Name = "Could not read" }, Array.Empty<string>());
-                }
+                keys[i] = prefabs[i] != null ? KeyOf(prefabs[i]) : null;
             }
 
-            Mod.Log.Info($"Inventory: {all.Count} prefabs in {inventory.Packs.Count} packs read in {(DateTime.UtcNow - started).TotalSeconds:F1} s ({failed} failed).");
-            LogSummary(inventory);
-            return new LoadedPrefabs(all, inventory, keys);
+            var loaded = new LoadedPrefabs(prefabs, keys);
+            Mod.Log.Info($"Listed {prefabs.Length} prefabs in {(DateTime.UtcNow - started).TotalMilliseconds:F0} ms, fingerprint {loaded.Fingerprint}.");
+            return loaded;
+        }
+
+        public bool TryReuse(Inventory cached)
+        {
+            if (!InventoryFingerprint.Matches(cached, Fingerprint, DateTime.Now))
+            {
+                return false;
+            }
+
+            Inventory = cached;
+            Mod.Log.Info($"The loaded prefabs match the saved inventory from {cached.GeneratedAt}; reusing it.");
+            return true;
+        }
+
+        public bool Step(TimeSpan budget)
+        {
+            if (Ready)
+            {
+                return true;
+            }
+
+            building ??= new Inventory { Fingerprint = Fingerprint };
+            var slice = Stopwatch.StartNew();
+            working.Start();
+            while (next < prefabs.Length && slice.Elapsed < budget)
+            {
+                Add(next++);
+            }
+
+            working.Stop();
+            if (next < prefabs.Length)
+            {
+                return false;
+            }
+
+            building.GeneratedAt = DateTime.Now.ToString("yyyy-MM-ddTHH:mm:ss", CultureInfo.InvariantCulture);
+            Inventory = building;
+            Mod.Log.Info($"Inventory: {prefabs.Length} prefabs in {Inventory.Packs.Count} packs read in {working.Elapsed.TotalSeconds:F1} s of work ({failed} failed).");
+            LogSummary(Inventory);
+            return true;
+        }
+
+        public void Finish() => Step(TimeSpan.MaxValue);
+
+        void Add(int index)
+        {
+            var prefab = prefabs[index];
+            if (prefab == null)
+            {
+                return;
+            }
+
+            try
+            {
+                building.Add(prefab.GetType().Name, prefab.name, PackResolver.Resolve(OriginOf(prefab)), Dependencies(prefab, components, dependencies));
+            }
+            catch (Exception e)
+            {
+                if (failed++ < 10)
+                {
+                    Mod.Log.Warn($"Could not read {keys[index]}: {e.Message}");
+                }
+
+                building.Add(prefab.GetType().Name, prefab.name, new PackRef { Id = PackSource.Unknown + ":error", Source = PackSource.Unknown, Name = "Could not read" }, Array.Empty<string>());
+            }
         }
 
         static string KeyOf(PrefabBase prefab) => Inventory.Key(prefab.GetType().Name, prefab.name);

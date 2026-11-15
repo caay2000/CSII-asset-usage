@@ -52,6 +52,32 @@ namespace AssetUsage
             }
         }
 
+        public static Task<Inventory> LoadInventoryAsync() => Task.Run(() =>
+        {
+            try
+            {
+                if (!File.Exists(InventoryPath))
+                {
+                    return null;
+                }
+
+                var started = DateTime.UtcNow;
+                Inventory inventory;
+                using (var reader = new JsonTextReader(new StreamReader(InventoryPath)))
+                {
+                    inventory = JsonSerializer.Create(settings).Deserialize<Inventory>(reader);
+                }
+
+                Mod.Log.Info($"Read the saved inventory ({inventory?.Prefabs.Count ?? 0} prefabs) in {(DateTime.UtcNow - started).TotalSeconds:F1} s.");
+                return inventory;
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Warn($"Could not read the saved inventory, it will be rebuilt: {e.Message}");
+                return null;
+            }
+        });
+
         public static void Enqueue(string what, Func<object> snapshot, string path)
         {
             lock (gate)

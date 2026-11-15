@@ -10,7 +10,9 @@ Status: internal, not published. Design in `docs/feature/`.
 
 - When a city finishes loading, the mod reads every loaded prefab, works out the pack it comes from (Paradox Mods id,
   local folder under `Mods/`, the game, or "runtime" for prefabs made by Extra Assets Importer and code mods) and the
-  prefabs it references. It writes this to `ModsData/asset-usage/inventory.json`.
+  prefabs it references. It writes this to `ModsData/asset-usage/inventory.json`. The city opens without waiting for it:
+  - If the loaded prefabs are the same as in the saved inventory (and it is under 7 days old), the saved one is reused.
+  - Otherwise the inventory is built a few milliseconds per frame while you play.
 - It then reads every entity in the city and records the prefabs in use. While you play, it adds the prefabs of new
   entities (placed by any tool, or grown by the game).
 - Everything a used prefab references (meshes, sub-objects, sub-nets, variants...) counts as used indirectly.
