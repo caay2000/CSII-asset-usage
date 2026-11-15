@@ -27,7 +27,7 @@ namespace AssetUsage
         public void OnDispose()
         {
             Log.Info(nameof(OnDispose));
-            UsageSystem.Instance?.FlushNow("exit");
+            UsageSystem.Instance?.FlushNow("exit", true);
             Storage.WaitForWrites();
         }
     }

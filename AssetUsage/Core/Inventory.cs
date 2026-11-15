@@ -35,6 +35,8 @@ namespace AssetUsage.Core
 
         public string GeneratedAt { get; set; }
 
+        public string Fingerprint { get; set; }
+
         public SortedDictionary<string, PackRecord> Packs { get; set; } = new SortedDictionary<string, PackRecord>(StringComparer.Ordinal);
 
         public Dictionary<string, PrefabRecord> Prefabs { get; set; } = new Dictionary<string, PrefabRecord>(StringComparer.Ordinal);

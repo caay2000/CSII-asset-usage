@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.5 (2026-11-15)
+- La carga de la partida ya no espera al inventario (antes, de 15 a 58 s bloqueando el juego).
+  - Si los prefabs cargados son los mismos que en el `inventory.json` guardado, que se lee en segundo plano al arrancar
+    el juego, se reutiliza. Se compara una huella de sus nombres, y el guardado no puede tener más de 7 días.
+  - Si no, el inventario se construye poco a poco, 4 ms por fotograma, mientras se juega.
+  - El uso de la ciudad se guarda cuando el inventario está listo, o al salir de la ciudad o del juego.
+
 ## 0.1.4 (2026-11-15)
 - Informe: dependencias entre packs, sacadas de la caché de mods del juego.
   - Cada pack indica qué packs lo necesitan.
