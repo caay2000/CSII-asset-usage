@@ -5,7 +5,9 @@
   - Si los prefabs cargados son los mismos que en el `inventory.json` guardado, que se lee en segundo plano al arrancar
     el juego, se reutiliza. Se compara una huella de sus nombres, y el guardado no puede tener más de 7 días.
   - Si no, el inventario se construye poco a poco, 4 ms por fotograma, mientras se juega.
-  - El uso de la ciudad se guarda cuando el inventario está listo, o al salir de la ciudad o del juego.
+  - El uso de la ciudad se guarda cuando el inventario está listo.
+  - Si se sale de la ciudad o del juego antes de que esté listo, se guarda solo el uso directo, sin esperar.
+  - La huella incluye la versión del mod, así que el inventario se rehace al actualizarlo.
 
 ## 0.1.4 (2026-11-15)
 - Informe: dependencias entre packs, sacadas de la caché de mods del juego.
