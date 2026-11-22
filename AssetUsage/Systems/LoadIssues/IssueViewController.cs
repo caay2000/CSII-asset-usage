@@ -1,9 +1,6 @@
 using Game.Prefabs;
 using Game.Tools;
 using Unity.Entities;
-using Unity.Mathematics;
-using NetElevation = Game.Net.Elevation;
-using ObjectElevation = Game.Objects.Elevation;
 using Voltage = Game.Prefabs.ElectricityConnection.Voltage;
 
 namespace AssetUsage.Systems.LoadIssues
@@ -26,16 +23,18 @@ namespace AssetUsage.Systems.LoadIssues
             this.infoviews = infoviews;
         }
 
+        public bool PlayerIsIdle => toolSystem.activeTool is DefaultToolSystem;
+
         public void ShowBrokenNode(Entity node)
         {
             ApplyInfoview(FindInfoview(StatusOf(node)));
-            ApplyUnderground(IsUnderground(node));
+            ApplyUnderground(UndergroundCheck.IsUnderground(entityManager, node));
         }
 
         public void ShowCase(Entity location)
         {
             RestoreInfoview();
-            ApplyUnderground(IsUnderground(location));
+            ApplyUnderground(UndergroundCheck.IsUnderground(entityManager, location));
         }
 
         public void Reset()
@@ -57,10 +56,16 @@ namespace AssetUsage.Systems.LoadIssues
         {
             foreach (var infoview in infoviews.infoviews)
             {
+                if (infoview == null || !infoview.isValid || infoview.m_Editor)
+                {
+                    continue;
+                }
+
                 foreach (var info in infoview.m_Infomodes)
                 {
-                    var mode = prefabSystem.GetEntity(info.m_Mode);
-                    if (entityManager.HasComponent<InfoviewNetStatusData>(mode)
+                    if (info?.m_Mode != null
+                        && prefabSystem.TryGetEntity(info.m_Mode, out var mode)
+                        && entityManager.HasComponent<InfoviewNetStatusData>(mode)
                         && entityManager.GetComponentData<InfoviewNetStatusData>(mode).m_Type == status)
                     {
                         return infoview;
@@ -99,30 +104,28 @@ namespace AssetUsage.Systems.LoadIssues
             previous = null;
         }
 
-        void ApplyUnderground(bool underground)
+        void ApplyUnderground(bool wanted)
         {
-            var tool = toolSystem.activeTool;
-            if (underground && !undergroundApplied && tool != null && tool.allowUnderground && !tool.requireUnderground)
+            if (!(toolSystem.activeTool is DefaultToolSystem tool))
             {
-                tool.SetUnderground(true);
-                undergroundApplied = true;
+                return;
             }
-            else if (!underground && undergroundApplied)
+
+            if (undergroundApplied && !tool.underground)
             {
-                tool?.SetUnderground(false);
                 undergroundApplied = false;
             }
-        }
 
-        bool IsUnderground(Entity entity)
-        {
-            if (entityManager.HasComponent<NetElevation>(entity))
+            if (wanted && !tool.underground)
             {
-                return math.cmin(entityManager.GetComponentData<NetElevation>(entity).m_Elevation) < 0;
+                tool.underground = true;
+                undergroundApplied = true;
             }
-
-            return entityManager.HasComponent<ObjectElevation>(entity)
-                && entityManager.GetComponentData<ObjectElevation>(entity).m_Elevation < 0;
+            else if (!wanted && undergroundApplied)
+            {
+                tool.underground = false;
+                undergroundApplied = false;
+            }
         }
     }
 }

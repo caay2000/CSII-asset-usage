@@ -126,9 +126,20 @@ namespace AssetUsage.Tests
             report.AddReference("SurfacePrefab:B (b)", "PrefabRef", new CaseRef(2, 1), false);
             report.AddReference("BrandPrefab:C (c)", "Company", new CaseRef(3, 1), true);
 
-            Assert.Equal("BrandPrefab:C (c)", report.NextIssueWithCases("SurfacePrefab:A (a)"));
-            Assert.Equal("SurfacePrefab:A (a)", report.NextIssueWithCases("BrandPrefab:C (c)"));
-            Assert.Equal("SurfacePrefab:A (a)", report.NextIssueWithCases(null));
+            var tree = LoadIssueTree.Build(report, null);
+
+            Assert.Equal("BrandPrefab:C (c)", LoadIssueTree.NextIssue(tree, "SurfacePrefab:A (a)"));
+            Assert.Equal("SurfacePrefab:A (a)", LoadIssueTree.NextIssue(tree, "BrandPrefab:C (c)"));
+            Assert.Equal("SurfacePrefab:A (a)", LoadIssueTree.NextIssue(tree, null));
+        }
+
+        [Fact]
+        public void There_is_no_next_issue_when_only_the_current_one_has_cases()
+        {
+            var report = new LoadIssueReport();
+            report.AddReference("SurfacePrefab:A (a)", "PrefabRef", new CaseRef(1, 1), true);
+
+            Assert.Null(LoadIssueTree.NextIssue(LoadIssueTree.Build(report, null), "SurfacePrefab:A (a)"));
         }
 
         [Fact]
