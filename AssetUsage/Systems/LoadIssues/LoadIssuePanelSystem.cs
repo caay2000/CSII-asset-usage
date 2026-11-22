@@ -45,6 +45,11 @@ namespace AssetUsage.Systems.LoadIssues
         SelectedInfoUISystem selectedInfo;
         LocationResolver locations;
         LoadIssueFixer fixer;
+        IssueViewController views;
+        BrokenNodeScanner brokenScanner;
+        string activeIssue;
+        CaseRef? activeCase;
+        bool fixPending;
         ValueBinding<bool> open;
         ValueBinding<bool> notice;
         ValueBinding<string> tree;
@@ -63,7 +68,8 @@ namespace AssetUsage.Systems.LoadIssues
             prefabSystem = World.GetOrCreateSystemManaged<PrefabSystem>();
             selectedInfo = World.GetOrCreateSystemManaged<SelectedInfoUISystem>();
             locations = new LocationResolver(EntityManager);
-            fixer = new LoadIssueFixer(EntityManager, World.GetOrCreateSystemManaged<Game.Tools.ToolOutputBarrier>());
+            fixer = new LoadIssueFixer(EntityManager, World.GetOrCreateSystemManaged<EndFrameBarrier>());
+            views = new IssueViewController(EntityManager, World.GetOrCreateSystemManaged<Game.Tools.ToolSystem>(), prefabSystem, World.GetOrCreateSystemManaged<InfoviewInitializeSystem>());
             AddBinding(open = new ValueBinding<bool>(Group, "open", false));
             AddBinding(notice = new ValueBinding<bool>(Group, "notice", false));
             AddBinding(tree = new ValueBinding<string>(Group, "tree", "{}"));
@@ -100,6 +106,7 @@ namespace AssetUsage.Systems.LoadIssues
             if (rescanAt > 0 && UnityEngine.Time.realtimeSinceStartup >= rescanAt)
             {
                 rescanAt = 0;
+                fixPending = false;
                 Scan(false);
             }
 
@@ -111,6 +118,7 @@ namespace AssetUsage.Systems.LoadIssues
             nextSweep = UnityEngine.Time.realtimeSinceStartup + SweepEverySeconds;
             try
             {
+                AdvanceIfResolved();
                 Sweep();
             }
             catch (Exception e)
@@ -131,6 +139,75 @@ namespace AssetUsage.Systems.LoadIssues
             RestartSweepPass();
             sweepFailed = false;
             changed = false;
+            activeIssue = null;
+            activeCase = null;
+        }
+
+        void AdvanceIfResolved()
+        {
+            if (!activeCase.HasValue)
+            {
+                return;
+            }
+
+            var current = activeCase.Value;
+            var entity = ToEntity(current);
+            if (activeIssue == null)
+            {
+                AdvanceFromBrokenNode(current, entity);
+                return;
+            }
+
+            string id = activeIssue;
+            var issue = report.Missing.FirstOrDefault(i => i.Id == id);
+            var located = issue?.Located.FirstOrDefault(l => l.Entity.Equals(current));
+            if (located == null)
+            {
+                activeCase = null;
+            }
+            else if (!StillReferences(entity, located.Kind, id))
+            {
+                report.RemoveCurrent(id, 1);
+                if (issue.Located.Count > 0)
+                {
+                    Step(id, 1);
+                }
+                else
+                {
+                    GoToIssueOrNode(report.NextIssueWithCases(id));
+                }
+            }
+        }
+
+        void AdvanceFromBrokenNode(CaseRef current, Entity entity)
+        {
+            if (!report.BrokenNodes.Contains(current))
+            {
+                activeCase = null;
+            }
+            else if (IsGone(entity) || !brokenScanner.StillBroken(entity))
+            {
+                report.RemoveCurrentBrokenNode(1);
+                GoToIssueOrNode(report.BrokenNodes.Count > 0 ? null : report.NextIssueWithCases(null));
+            }
+        }
+
+        void GoToIssueOrNode(string issueId)
+        {
+            if (issueId != null)
+            {
+                Step(issueId, 1);
+            }
+            else if (report.BrokenNodes.Count > 0)
+            {
+                StepNode(1);
+            }
+            else
+            {
+                activeCase = null;
+                views.Reset();
+                Publish();
+            }
         }
 
         void RestartSweepPass()
@@ -144,10 +221,13 @@ namespace AssetUsage.Systems.LoadIssues
         {
             report = null;
             prefabsById = null;
+            brokenScanner = null;
             fixResult = null;
+            fixPending = false;
             rescanAt = 0;
             replacementSurfaces.Clear();
             ResetSweep();
+            views.Reset();
             open.Update(false);
             notice.Update(false);
             tree.Update("{}");
@@ -161,11 +241,23 @@ namespace AssetUsage.Systems.LoadIssues
             {
                 notice.Update(false);
             }
+            else
+            {
+                activeCase = null;
+                views.Reset();
+            }
 
             nextSweep = 0;
         }
 
-        void Rescan() => Scan(false);
+        void Rescan()
+        {
+            if (!fixPending)
+            {
+                fixResult = null;
+                Scan(false);
+            }
+        }
 
         void ChangeBrands() => ApplyFix(() =>
         {
@@ -180,13 +272,19 @@ namespace AssetUsage.Systems.LoadIssues
         });
 
         void ReplaceSurfaces(string id) => ApplyFix(() =>
-            replacementSurfaces.TryGetValue(id, out var replacement) && EntityManager.Exists(replacement)
-                ? $"Replaced {fixer.ReplaceSurfaces(replacement)} surfaces with {PrefabIds.Name(id)}."
-                : "That surface is no longer available.");
+        {
+            if (!replacementSurfaces.TryGetValue(id, out var replacement) || !fixer.IsPlainSurface(replacement))
+            {
+                return "That surface is no longer available.";
+            }
+
+            var (replaced, kept) = fixer.ReplaceSurfaces(replacement);
+            return $"Replaced {replaced} surfaces with {PrefabIds.Name(id)}, kept {kept} that belong to a building or lot.";
+        });
 
         void ApplyFix(Func<string> fix)
         {
-            if (report == null || rescanAt > 0)
+            if (report == null || fixPending)
             {
                 return;
             }
@@ -195,6 +293,7 @@ namespace AssetUsage.Systems.LoadIssues
             {
                 fixResult = fix();
                 Mod.Log.Info(fixResult);
+                fixPending = true;
                 rescanAt = UnityEngine.Time.realtimeSinceStartup + RescanDelaySeconds;
             }
             catch (Exception e)
@@ -213,7 +312,7 @@ namespace AssetUsage.Systems.LoadIssues
             using var entities = query.ToEntityArray(Unity.Collections.Allocator.TempJob);
             foreach (var entity in entities)
             {
-                if (prefabSystem.TryGetPrefab<PrefabBase>(entity, out var prefab))
+                if (fixer.IsPlainSurface(entity) && prefabSystem.TryGetPrefab<PrefabBase>(entity, out var prefab))
                 {
                     replacementSurfaces[prefab.GetPrefabID().ToString()] = entity;
                 }
@@ -234,8 +333,10 @@ namespace AssetUsage.Systems.LoadIssues
                 var scanned = new LoadIssueReport();
                 var scanner = new MissingPrefabScanner(EntityManager, prefabSystem, scanned, locations);
                 scanner.Scan();
-                new BrokenNodeScanner(EntityManager, scanned).Scan();
+                var nodes = new BrokenNodeScanner(EntityManager, scanned);
+                nodes.Scan();
                 report = scanned;
+                brokenScanner = nodes;
                 prefabsById = scanner.PrefabsById;
                 ResetSweep();
                 double elapsed = watch.Elapsed.TotalMilliseconds;
@@ -251,6 +352,7 @@ namespace AssetUsage.Systems.LoadIssues
             {
                 Mod.Log.Error(e);
                 report = null;
+                brokenScanner = null;
                 prefabsById = null;
                 ResetSweep();
                 tree.Update(JsonConvert.SerializeObject(new LoadIssueTree { Error = "The scan failed. See asset-usage.log." }, JsonSettings));
@@ -268,7 +370,7 @@ namespace AssetUsage.Systems.LoadIssues
         {
             if (report != null)
             {
-                Navigate(() => report.Step(id, delta), () => report.RemoveCurrent(id, delta));
+                Navigate(() => report.Step(id, delta), () => report.RemoveCurrent(id, delta), id);
             }
         }
 
@@ -276,20 +378,33 @@ namespace AssetUsage.Systems.LoadIssues
         {
             if (report != null)
             {
-                Navigate(() => report.StepBrokenNode(delta), () => report.RemoveCurrentBrokenNode(delta));
+                Navigate(() => report.StepBrokenNode(delta), () => report.RemoveCurrentBrokenNode(delta), null);
             }
         }
 
-        void Navigate(Func<CaseRef?> step, Action removeCurrent)
+        void Navigate(Func<CaseRef?> step, Action removeCurrent, string issueId)
         {
             try
             {
+                activeCase = null;
                 for (var target = step(); target.HasValue; target = step())
                 {
-                    if (locations.TryResolve(ToEntity(target.Value), out var location))
+                    var entity = ToEntity(target.Value);
+                    if (locations.TryResolve(entity, out var location))
                     {
+                        if (issueId == null)
+                        {
+                            views.ShowBrokenNode(entity);
+                        }
+                        else
+                        {
+                            views.ShowCase(location);
+                        }
+
                         selectedInfo.SetSelection(location);
                         selectedInfo.Focus(location);
+                        activeIssue = issueId;
+                        activeCase = target;
                         break;
                     }
 
@@ -350,7 +465,8 @@ namespace AssetUsage.Systems.LoadIssues
             if (sweepNode < report.BrokenNodes.Count)
             {
                 var node = report.BrokenNodes[sweepNode];
-                if (IsGone(ToEntity(node)) && report.RemoveBrokenNode(node))
+                var nodeEntity = ToEntity(node);
+                if ((IsGone(nodeEntity) || !brokenScanner.StillBroken(nodeEntity)) && report.RemoveBrokenNode(node))
                 {
                     changed = true;
                 }
