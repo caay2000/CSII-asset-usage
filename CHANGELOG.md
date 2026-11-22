@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6 (2026-11-22)
+- Diagnóstico de problemas de carga, solo en el log: al terminar de cargar una partida lista los prefabs que faltan, qué
+  los referencia, qué mod los aporta y los nodos con el grafo eléctrico roto. No modifica la partida.
+
 ## 0.1.5 (2026-11-15)
 - La carga de la partida ya no espera al inventario (antes, de 15 a 58 s bloqueando el juego).
   - Si los prefabs cargados son los mismos que en el `inventory.json` guardado, que se lee en segundo plano al arrancar
