@@ -118,6 +118,23 @@ namespace AssetUsage.Core.LoadIssues
             };
         }
 
+        public static string NextIssue(LoadIssueTree tree, string afterId)
+        {
+            var ordered = tree.Groups
+                .SelectMany(g => g.Mods)
+                .SelectMany(m => m.Prefabs)
+                .Where(p => p.Located > 0)
+                .Select(p => p.Id)
+                .ToList();
+            int after = ordered.IndexOf(afterId);
+            if (after < 0)
+            {
+                return ordered.FirstOrDefault();
+            }
+
+            return ordered.Count > 1 ? ordered[(after + 1) % ordered.Count] : null;
+        }
+
         static IssueGroupNode BuildGroup(IGrouping<LoadIssueCategory, MissingPrefabIssue> group, IPrefabOriginLookup origins)
         {
             var mods = group

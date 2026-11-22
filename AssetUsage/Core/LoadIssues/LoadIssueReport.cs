@@ -211,31 +211,6 @@ namespace AssetUsage.Core.LoadIssues
 
         public string BrokenKind(CaseRef node) => brokenKinds.TryGetValue(node, out var kind) ? kind : UnknownBrokenKind;
 
-        public string NextIssueWithCases(string afterId)
-        {
-            var ordered = missing.Values
-                .Where(i => i.Category != LoadIssueCategory.Content && i.Located.Count > 0)
-                .OrderBy(i => i.Category)
-                .ThenBy(i => i.Id, StringComparer.Ordinal)
-                .Select(i => i.Id)
-                .ToList();
-            if (ordered.Count == 0)
-            {
-                return null;
-            }
-
-            int after = afterId == null || !missing.TryGetValue(afterId, out var current)
-                ? -1
-                : ordered.FindLastIndex(id => OrderBefore(missing[id], current));
-            return ordered[(after + 1) % ordered.Count];
-        }
-
-        static bool OrderBefore(MissingPrefabIssue candidate, MissingPrefabIssue current)
-        {
-            int category = candidate.Category.CompareTo(current.Category);
-            return category < 0 || (category == 0 && StringComparer.Ordinal.Compare(candidate.Id, current.Id) <= 0);
-        }
-
         public void AddBrokenNode(CaseRef node, string kind = null)
         {
             brokenKinds[node] = kind ?? UnknownBrokenKind;

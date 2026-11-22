@@ -5,7 +5,6 @@ using Game.Prefabs;
 using Game.Simulation;
 using Unity.Collections;
 using Unity.Entities;
-using Unity.Mathematics;
 
 namespace AssetUsage.Systems.LoadIssues
 {
@@ -101,7 +100,7 @@ namespace AssetUsage.Systems.LoadIssues
             var prefab = entityManager.GetComponentData<PrefabRef>(node).m_Prefab;
             var layers = entityManager.HasComponent<NetData>(prefab) ? entityManager.GetComponentData<NetData>(prefab).m_RequiredLayers : Layer.None;
             string kind = BaseKind(layers);
-            return IsUnderground(node) ? $"{kind} (underground)" : kind;
+            return UndergroundCheck.IsUnderground(entityManager, node) ? $"{kind} (underground)" : kind;
         }
 
         static string BaseKind(Layer layers)
@@ -138,9 +137,6 @@ namespace AssetUsage.Systems.LoadIssues
 
             return (layers & Layer.Pathway) != 0 ? "Pathway" : "Other";
         }
-
-        bool IsUnderground(Entity node) =>
-            entityManager.HasComponent<Elevation>(node) && math.cmin(entityManager.GetComponentData<Elevation>(node).m_Elevation) < 0;
 
         bool IsBroken(Entity node, Entity middle)
         {

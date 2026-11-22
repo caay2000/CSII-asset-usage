@@ -145,70 +145,98 @@ namespace AssetUsage.Systems.LoadIssues
 
         void AdvanceIfResolved()
         {
-            if (!activeCase.HasValue)
+            if (!activeCase.HasValue || fixPending || !views.PlayerIsIdle)
             {
                 return;
             }
 
             var current = activeCase.Value;
-            var entity = ToEntity(current);
             if (activeIssue == null)
             {
-                AdvanceFromBrokenNode(current, entity);
+                AdvanceFromBrokenNode(current);
                 return;
             }
 
             string id = activeIssue;
             var issue = report.Missing.FirstOrDefault(i => i.Id == id);
-            var located = issue?.Located.FirstOrDefault(l => l.Entity.Equals(current));
-            if (located == null)
+            if (issue == null || !issue.Located.Any(l => l.Entity.Equals(current)))
             {
                 activeCase = null;
             }
-            else if (!StillReferences(entity, located.Kind, id))
+            else if (!IsOpen(id, current))
             {
+                string next = NextIssue(id);
                 report.RemoveCurrent(id, 1);
+                activeCase = null;
                 if (issue.Located.Count > 0)
                 {
                     Step(id, 1);
                 }
-                else
+
+                if (!activeCase.HasValue)
                 {
-                    GoToIssueOrNode(report.NextIssueWithCases(id));
+                    GoToIssueOrNode(next);
                 }
             }
         }
 
-        void AdvanceFromBrokenNode(CaseRef current, Entity entity)
+        void AdvanceFromBrokenNode(CaseRef current)
         {
             if (!report.BrokenNodes.Contains(current))
             {
                 activeCase = null;
             }
-            else if (IsGone(entity) || !brokenScanner.StillBroken(entity))
+            else if (!IsOpen(null, current))
             {
                 report.RemoveCurrentBrokenNode(1);
-                GoToIssueOrNode(report.BrokenNodes.Count > 0 ? null : report.NextIssueWithCases(null));
+                activeCase = null;
+                GoToIssueOrNode(report.BrokenNodes.Count > 0 ? null : NextIssue(null));
             }
         }
 
+        string NextIssue(string afterId) => LoadIssueTree.NextIssue(LoadIssueTree.Build(report, origins), afterId);
+
         void GoToIssueOrNode(string issueId)
         {
-            if (issueId != null)
+            int attempts = report.Missing.Count;
+            for (; issueId != null && attempts > 0; attempts--)
             {
                 Step(issueId, 1);
+                if (activeCase.HasValue)
+                {
+                    return;
+                }
+
+                issueId = NextIssue(issueId);
             }
-            else if (report.BrokenNodes.Count > 0)
+
+            if (report.BrokenNodes.Count > 0)
             {
                 StepNode(1);
+                if (activeCase.HasValue)
+                {
+                    return;
+                }
             }
-            else
-            {
-                activeCase = null;
-                views.Reset();
-                Publish();
-            }
+
+            views.Reset();
+            Publish();
         }
+
+        bool IsOpen(string issueId, CaseRef target)
+        {
+            var entity = ToEntity(target);
+            if (issueId == null)
+            {
+                return !IsGone(entity) && brokenScanner.StillBroken(entity);
+            }
+
+            var located = report.Missing.FirstOrDefault(i => i.Id == issueId)?.Located.FirstOrDefault(l => l.Entity.Equals(target));
+            return located != null && StillReferences(entity, located.Kind, issueId);
+        }
+
+        bool IsActive(string issueId, CaseRef target) =>
+            activeCase.HasValue && activeCase.Value.Equals(target) && activeIssue == issueId;
 
         void RestartSweepPass()
         {
@@ -390,17 +418,9 @@ namespace AssetUsage.Systems.LoadIssues
                 for (var target = step(); target.HasValue; target = step())
                 {
                     var entity = ToEntity(target.Value);
-                    if (locations.TryResolve(entity, out var location))
+                    if (IsOpen(issueId, target.Value) && locations.TryResolve(entity, out var location))
                     {
-                        if (issueId == null)
-                        {
-                            views.ShowBrokenNode(entity);
-                        }
-                        else
-                        {
-                            views.ShowCase(location);
-                        }
-
+                        ShowView(issueId, entity, location);
                         selectedInfo.SetSelection(location);
                         selectedInfo.Focus(location);
                         activeIssue = issueId;
@@ -412,6 +432,25 @@ namespace AssetUsage.Systems.LoadIssues
                 }
 
                 Publish();
+            }
+            catch (Exception e)
+            {
+                Mod.Log.Error(e);
+            }
+        }
+
+        void ShowView(string issueId, Entity entity, Entity location)
+        {
+            try
+            {
+                if (issueId == null)
+                {
+                    views.ShowBrokenNode(entity);
+                }
+                else
+                {
+                    views.ShowCase(location);
+                }
             }
             catch (Exception e)
             {
@@ -446,7 +485,7 @@ namespace AssetUsage.Systems.LoadIssues
                 if (sweepCase < issue.Located.Count)
                 {
                     var located = issue.Located[sweepCase];
-                    if (!StillReferences(ToEntity(located.Entity), located.Kind, issue.Id) && issue.Remove(located))
+                    if (!IsActive(issue.Id, located.Entity) && !StillReferences(ToEntity(located.Entity), located.Kind, issue.Id) && issue.Remove(located))
                     {
                         changed = true;
                     }
@@ -466,7 +505,7 @@ namespace AssetUsage.Systems.LoadIssues
             {
                 var node = report.BrokenNodes[sweepNode];
                 var nodeEntity = ToEntity(node);
-                if ((IsGone(nodeEntity) || !brokenScanner.StillBroken(nodeEntity)) && report.RemoveBrokenNode(node))
+                if (!IsActive(null, node) && (IsGone(nodeEntity) || !brokenScanner.StillBroken(nodeEntity)) && report.RemoveBrokenNode(node))
                 {
                     changed = true;
                 }
