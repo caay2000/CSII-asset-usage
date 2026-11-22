@@ -24,27 +24,51 @@ namespace AssetUsage.Core.LoadIssues
         public List<string> KeptAliveBy { get; set; }
     }
 
-    public sealed class TypeNode
-    {
-        public string Category { get; set; }
-
-        public int Count { get; set; }
-
-        public List<PrefabNode> Prefabs { get; set; }
-    }
-
     public sealed class ModNode
     {
         public string Name { get; set; }
 
         public int Count { get; set; }
 
-        public List<TypeNode> Types { get; set; }
+        public List<PrefabNode> Prefabs { get; set; }
+    }
+
+    public sealed class IssueGroupNode
+    {
+        public string Category { get; set; }
+
+        public int Count { get; set; }
+
+        public List<string> Fixes { get; set; }
+
+        public List<ModNode> Mods { get; set; }
+    }
+
+    public static class LoadIssueFixes
+    {
+        public const string ChangeBrand = "changeBrand";
+        public const string Remove = "remove";
+        public const string Replace = "replace";
+
+        public static List<string> For(LoadIssueCategory category)
+        {
+            switch (category)
+            {
+                case LoadIssueCategory.Brand:
+                    return new List<string> { ChangeBrand };
+                case LoadIssueCategory.Surface:
+                    return new List<string> { Remove, Replace };
+                default:
+                    return new List<string>();
+            }
+        }
     }
 
     public sealed class LoadIssueTree
     {
         public string Error { get; set; }
+
+        public string Result { get; set; }
 
         public bool Scanned { get; set; }
 
@@ -54,49 +78,53 @@ namespace AssetUsage.Core.LoadIssues
 
         public int BrokenCursor { get; set; }
 
-        public List<ModNode> Mods { get; set; } = new List<ModNode>();
+        public List<IssueGroupNode> Groups { get; set; } = new List<IssueGroupNode>();
 
         public static LoadIssueTree Build(LoadIssueReport report, IPrefabOriginLookup origins)
         {
-            var listed = report.Missing
+            var groups = report.Missing
                 .Where(i => i.Category != LoadIssueCategory.Content && report.IsListed(i))
+                .GroupBy(i => i.Category)
+                .OrderBy(g => g.Key)
+                .Select(g => BuildGroup(g, origins))
                 .ToList();
-            var mods = listed
+            return new LoadIssueTree
+            {
+                Scanned = true,
+                Total = groups.Sum(g => g.Count) + report.BrokenNodes.Count,
+                BrokenNodes = report.BrokenNodes.Count,
+                BrokenCursor = report.BrokenCursor,
+                Groups = groups,
+            };
+        }
+
+        static IssueGroupNode BuildGroup(IGrouping<LoadIssueCategory, MissingPrefabIssue> group, IPrefabOriginLookup origins)
+        {
+            var mods = group
                 .GroupBy(i => PrefabIds.Origin(i, origins), StringComparer.Ordinal)
                 .Select(BuildMod)
                 .OrderByDescending(m => m.Count)
                 .ThenBy(m => m.Name, StringComparer.Ordinal)
                 .ToList();
-            return new LoadIssueTree
+            return new IssueGroupNode
             {
-                Scanned = true,
-                Total = mods.Sum(m => m.Count) + report.BrokenNodes.Count,
-                BrokenNodes = report.BrokenNodes.Count,
-                BrokenCursor = report.BrokenCursor,
+                Category = group.Key.ToString(),
+                Count = mods.Sum(m => m.Count),
+                Fixes = LoadIssueFixes.For(group.Key),
                 Mods = mods,
             };
         }
 
         static ModNode BuildMod(IGrouping<string, MissingPrefabIssue> group)
         {
-            var types = group
-                .GroupBy(i => i.Category)
-                .OrderBy(g => g.Key)
-                .Select(BuildType)
-                .ToList();
-            return new ModNode { Name = group.Key, Count = types.Sum(t => t.Count), Types = types };
-        }
-
-        static TypeNode BuildType(IGrouping<LoadIssueCategory, MissingPrefabIssue> group)
-        {
             var prefabs = group
                 .OrderByDescending(i => i.CaseCount)
                 .ThenBy(i => i.Id, StringComparer.Ordinal)
                 .Select(BuildPrefab)
                 .ToList();
-            return new TypeNode
+            return new ModNode
             {
-                Category = group.Key.ToString(),
+                Name = group.Key,
                 Count = prefabs.Sum(p => p.Located + p.Unlocated),
                 Prefabs = prefabs,
             };

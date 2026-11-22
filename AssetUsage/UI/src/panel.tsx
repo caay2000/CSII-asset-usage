@@ -1,12 +1,13 @@
 import { ReactNode, useState } from "react";
 import { Button, Scrollable, Tooltip } from "cs2/ui";
-import { actions, ModNode, PrefabNode, TypeNode, useOpen, useTree } from "./bindings";
+import { actions, IssueGroup, ModNode, PrefabNode, SurfaceOption, useNotice, useOpen, useSurfaces, useTree } from "./bindings";
 import styles from "./panel.module.scss";
 
 const ICON = "coui://assetusage/icon.svg";
 
 export const LoadIssuesButton = () => {
     const open = useOpen();
+    const notice = useNotice();
     const tree = useTree();
     if (!tree.scanned && !tree.error) return null;
     return (
@@ -14,14 +15,23 @@ export const LoadIssuesButton = () => {
             <Tooltip tooltip={`Load issues: ${tree.total ?? 0}`} direction="down" delayTime={0}>
                 <Button variant="floating" src={ICON} selected={open} onSelect={() => actions.setOpen(!open)} />
             </Tooltip>
+            {notice && !open && <Notice total={tree.total ?? 0} />}
             {open && <Panel />}
         </>
     );
 };
 
+const Notice = ({ total }: { total: number }) => (
+    <div className={styles.notice}>
+        <div className={styles.noticeText}>This city has {total} load issues.</div>
+        <button className={styles.action} onClick={() => actions.setOpen(true)}>Open</button>
+        <button className={styles.action} onClick={() => actions.dismissNotice()}>Skip</button>
+    </div>
+);
+
 const Panel = () => {
     const tree = useTree();
-    const mods = tree.mods ?? [];
+    const groups = tree.groups ?? [];
     const broken = tree.brokenNodes ?? 0;
     return (
         <div className={styles.panel}>
@@ -32,15 +42,18 @@ const Panel = () => {
                 <button className={styles.icon} onClick={() => actions.setOpen(false)}>×</button>
             </div>
             {tree.error && <div className={styles.error}>{tree.error}</div>}
-            {!tree.error && mods.length === 0 && broken === 0 && <div className={styles.empty}>No issues found.</div>}
+            {tree.result && <div className={styles.result}>{tree.result}</div>}
+            {!tree.error && groups.length === 0 && broken === 0 && <div className={styles.empty}>No issues found.</div>}
             <Scrollable className={styles.list} vertical trackVisibility="scrollable">
                 {broken > 0 && (
                     <div className={styles.row}>
+                        <div className={styles.arrow} />
                         <div className={styles.name}>Broken nodes</div>
+                        <div className={styles.count}>{broken}</div>
                         <Stepper cursor={tree.brokenCursor ?? 0} count={broken} onStep={actions.stepNode} />
                     </div>
                 )}
-                {mods.map((mod) => <ModRow key={mod.name} mod={mod} />)}
+                {groups.map((group) => <GroupRow key={group.category} group={group} />)}
             </Scrollable>
         </div>
     );
@@ -51,7 +64,7 @@ const Branch = ({ label, count, level, children }: { label: string; count: numbe
     return (
         <>
             <div className={`${styles.row} ${styles.branch}`} style={{ paddingLeft: `${8 + level * 16}rem` }} onClick={() => setExpanded(!expanded)}>
-                <div className={styles.arrow}>{expanded ? "▾" : "▸"}</div>
+                <div className={styles.arrow}>{expanded ? "▼" : "▶"}</div>
                 <div className={styles.name}>{label}</div>
                 <div className={styles.count}>{count}</div>
             </div>
@@ -60,15 +73,65 @@ const Branch = ({ label, count, level, children }: { label: string; count: numbe
     );
 };
 
-const ModRow = ({ mod }: { mod: ModNode }) => (
-    <Branch label={mod.name} count={mod.count} level={0}>
-        {mod.types.map((type) => <TypeRow key={type.category} type={type} />)}
+const GroupRow = ({ group }: { group: IssueGroup }) => (
+    <Branch label={group.category} count={group.count} level={0}>
+        {group.fixes.length > 0 && <FixBar group={group} />}
+        {group.mods.map((mod) => <ModRow key={mod.name} mod={mod} />)}
     </Branch>
 );
 
-const TypeRow = ({ type }: { type: TypeNode }) => (
-    <Branch label={type.category} count={type.count} level={1}>
-        {type.prefabs.map((prefab) => <PrefabRow key={prefab.id} prefab={prefab} />)}
+type Pending = { text: string; run: () => void } | null;
+
+const FixBar = ({ group }: { group: IssueGroup }) => {
+    const [pending, setPending] = useState<Pending>(null);
+    const [choosing, setChoosing] = useState(false);
+    const confirm = (text: string, run: () => void) => {
+        setChoosing(false);
+        setPending({ text, run });
+    };
+    if (pending) {
+        return (
+            <div className={styles.fix}>
+                <div className={styles.fixText}>{pending.text} This cannot be undone once you save.</div>
+                <button className={styles.action} onClick={() => { pending.run(); setPending(null); }}>Confirm</button>
+                <button className={styles.action} onClick={() => setPending(null)}>Cancel</button>
+            </div>
+        );
+    }
+    return (
+        <>
+            <div className={styles.fix}>
+                {group.fixes.includes("changeBrand") && (
+                    <button className={styles.action} onClick={() => confirm(`Change the brand of ${group.count} companies?`, actions.changeBrands)}>Change all brands</button>
+                )}
+                {group.fixes.includes("remove") && (
+                    <button className={styles.action} onClick={() => confirm("Remove every missing surface that is not part of a building?", actions.removeSurfaces)}>Remove all</button>
+                )}
+                {group.fixes.includes("replace") && (
+                    <button className={styles.action} onClick={() => setChoosing(!choosing)}>Replace all</button>
+                )}
+            </div>
+            {choosing && <SurfacePicker onPick={(surface) => confirm(`Replace every missing surface with ${surface.name}?`, () => actions.replaceSurfaces(surface.id))} />}
+        </>
+    );
+};
+
+const SurfacePicker = ({ onPick }: { onPick: (surface: SurfaceOption) => void }) => {
+    const surfaces = useSurfaces();
+    return (
+        <Scrollable className={styles.picker} vertical trackVisibility="scrollable">
+            {surfaces.map((surface) => (
+                <div key={surface.id} className={`${styles.row} ${styles.branch}`} onClick={() => onPick(surface)}>
+                    <div className={styles.name}>{surface.name}</div>
+                </div>
+            ))}
+        </Scrollable>
+    );
+};
+
+const ModRow = ({ mod }: { mod: ModNode }) => (
+    <Branch label={mod.name} count={mod.count} level={1}>
+        {mod.prefabs.map((prefab) => <PrefabRow key={prefab.id} prefab={prefab} />)}
     </Branch>
 );
 
@@ -86,7 +149,7 @@ const PrefabRow = ({ prefab }: { prefab: PrefabNode }) => (
 const Stepper = ({ cursor, count, onStep }: { cursor: number; count: number; onStep: (delta: number) => void }) => (
     <div className={styles.stepper}>
         <button className={styles.icon} onClick={() => onStep(-1)}>◀</button>
-        <div className={styles.position}>{cursor}/{count}</div>
+        <div className={styles.position}>{`${cursor}/${count}`}</div>
         <button className={styles.icon} onClick={() => onStep(1)}>▶</button>
     </div>
 );

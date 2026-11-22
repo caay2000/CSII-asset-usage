@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.8 (2026-11-22)
+- Panel de problemas de carga agrupado por tipo de error y, dentro, por mod.
+- Aviso al cargar una ciudad con problemas, con botones para abrir el panel o saltarlo.
+- Arreglos en bloque con confirmación: cambiar todas las marcas que faltan y eliminar o sustituir todas las superficies
+  que faltan. Las superficies que forman parte de un edificio no se eliminan.
+- El log describe las entidades sin ubicación para poder identificarlas.
+
 ## 0.1.7 (2026-11-22)
 - Panel de problemas de carga en la partida, de solo lectura: árbol mod > tipo > prefab con contadores, flechas para ir
   con la cámara a cada caso, grupo de nodos rotos y botón Rescan. Lo que se elimina sale de la lista sin recargar.
