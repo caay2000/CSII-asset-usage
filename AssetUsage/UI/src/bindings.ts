@@ -20,6 +20,8 @@ export interface IssueTree {
     total?: number;
     brokenNodes?: number;
     brokenCursor?: number;
+    brokenCurrent?: string | null;
+    brokenKinds?: { name: string; count: number }[];
     groups?: IssueGroup[];
 }
 export interface SurfaceOption { id: string; name: string }

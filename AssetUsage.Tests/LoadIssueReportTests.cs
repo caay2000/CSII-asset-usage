@@ -75,7 +75,7 @@ namespace AssetUsage.Tests
             Assert.Equal("Load issues: 2 missing prefabs, 1 references, 1 broken nodes, scanned in 12 ms.", lines[0]);
             Assert.StartsWith("Missing [Content]", lines[1]);
             Assert.Equal($"Missing [Building] {Building} | references: PrefabRef=1 | first: 10:1", lines[2]);
-            Assert.Equal("Broken node 5", lines[3]);
+            Assert.Equal("Broken node 5 [Other]", lines[3]);
         }
     }
 }

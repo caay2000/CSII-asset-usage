@@ -46,12 +46,18 @@ const Panel = () => {
             {!tree.error && groups.length === 0 && broken === 0 && <div className={styles.empty}>No issues found.</div>}
             <Scrollable className={styles.list} vertical trackVisibility="scrollable">
                 {broken > 0 && (
-                    <div className={styles.row}>
-                        <div className={styles.arrow} />
-                        <div className={styles.name}>Broken nodes</div>
-                        <div className={styles.count}>{broken}</div>
-                        <Stepper cursor={tree.brokenCursor ?? 0} count={broken} onStep={actions.stepNode} />
-                    </div>
+                    <>
+                        <div className={styles.row}>
+                            <div className={styles.arrow} />
+                            <div className={styles.name}>Broken nodes</div>
+                            <div className={styles.count}>{broken}</div>
+                            <Stepper cursor={tree.brokenCursor ?? 0} count={broken} onStep={actions.stepNode} />
+                        </div>
+                        <div className={styles.kept}>
+                            {(tree.brokenKinds ?? []).map((kind) => `${kind.name}: ${kind.count}`).join(", ")}
+                            {tree.brokenCurrent ? `. Current: ${tree.brokenCurrent}` : ""}
+                        </div>
+                    </>
                 )}
                 {groups.map((group) => <GroupRow key={group.category} group={group} />)}
             </Scrollable>
@@ -75,7 +81,7 @@ const Branch = ({ label, count, level, children }: { label: string; count: numbe
 
 const GroupRow = ({ group }: { group: IssueGroup }) => (
     <Branch label={group.category} count={group.count} level={0}>
-        {group.fixes.length > 0 && <FixBar group={group} />}
+        {group.fixes.length > 0 && group.count > 0 && <FixBar group={group} />}
         {group.mods.map((mod) => <ModRow key={mod.name} mod={mod} />)}
     </Branch>
 );
@@ -111,7 +117,7 @@ const FixBar = ({ group }: { group: IssueGroup }) => {
                     <button className={styles.action} onClick={() => setChoosing(!choosing)}>Replace all</button>
                 )}
             </div>
-            {choosing && <SurfacePicker onPick={(surface) => confirm(`Replace every missing surface with ${surface.name}?`, () => actions.replaceSurfaces(surface.id))} />}
+            {choosing && <SurfacePicker onPick={(surface) => confirm(`Replace every missing surface that is not part of a building with ${surface.name}?`, () => actions.replaceSurfaces(surface.id))} />}
         </>
     );
 };

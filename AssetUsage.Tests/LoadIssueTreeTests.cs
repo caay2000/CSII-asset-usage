@@ -103,6 +103,35 @@ namespace AssetUsage.Tests
         }
 
         [Fact]
+        public void Broken_nodes_are_summarised_by_kind_with_the_current_one()
+        {
+            var report = new LoadIssueReport();
+            report.AddBrokenNode(new CaseRef(1, 1), "Road");
+            report.AddBrokenNode(new CaseRef(2, 1), "Road");
+            report.AddBrokenNode(new CaseRef(3, 1), "Water pipe (underground)");
+            report.StepBrokenNode(-1);
+
+            var tree = LoadIssueTree.Build(report, null);
+
+            Assert.Equal("Water pipe (underground)", tree.BrokenCurrent);
+            Assert.Equal(new[] { "Road", "Water pipe (underground)" }, tree.BrokenKinds.Select(k => k.Name));
+            Assert.Equal(2, tree.BrokenKinds[0].Count);
+        }
+
+        [Fact]
+        public void The_next_issue_follows_the_panel_order_and_skips_issues_without_cases()
+        {
+            var report = new LoadIssueReport();
+            report.AddReference("SurfacePrefab:A (a)", "PrefabRef", new CaseRef(1, 1), true);
+            report.AddReference("SurfacePrefab:B (b)", "PrefabRef", new CaseRef(2, 1), false);
+            report.AddReference("BrandPrefab:C (c)", "Company", new CaseRef(3, 1), true);
+
+            Assert.Equal("BrandPrefab:C (c)", report.NextIssueWithCases("SurfacePrefab:A (a)"));
+            Assert.Equal("SurfacePrefab:A (a)", report.NextIssueWithCases("BrandPrefab:C (c)"));
+            Assert.Equal("SurfacePrefab:A (a)", report.NextIssueWithCases(null));
+        }
+
+        [Fact]
         public void The_same_reference_counts_once()
         {
             var report = new LoadIssueReport();

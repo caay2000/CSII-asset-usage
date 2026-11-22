@@ -33,6 +33,13 @@ namespace AssetUsage.Core.LoadIssues
         public List<PrefabNode> Prefabs { get; set; }
     }
 
+    public sealed class BrokenKindNode
+    {
+        public string Name { get; set; }
+
+        public int Count { get; set; }
+    }
+
     public sealed class IssueGroupNode
     {
         public string Category { get; set; }
@@ -78,6 +85,10 @@ namespace AssetUsage.Core.LoadIssues
 
         public int BrokenCursor { get; set; }
 
+        public string BrokenCurrent { get; set; }
+
+        public List<BrokenKindNode> BrokenKinds { get; set; } = new List<BrokenKindNode>();
+
         public List<IssueGroupNode> Groups { get; set; } = new List<IssueGroupNode>();
 
         public static LoadIssueTree Build(LoadIssueReport report, IPrefabOriginLookup origins)
@@ -94,6 +105,15 @@ namespace AssetUsage.Core.LoadIssues
                 Total = groups.Sum(g => g.Count) + report.BrokenNodes.Count,
                 BrokenNodes = report.BrokenNodes.Count,
                 BrokenCursor = report.BrokenCursor,
+                BrokenCurrent = report.BrokenCursor > 0 && report.BrokenCursor <= report.BrokenNodes.Count
+                    ? report.BrokenKind(report.BrokenNodes[report.BrokenCursor - 1])
+                    : null,
+                BrokenKinds = report.BrokenNodes
+                    .GroupBy(report.BrokenKind, StringComparer.Ordinal)
+                    .Select(g => new BrokenKindNode { Name = g.Key, Count = g.Count() })
+                    .OrderByDescending(k => k.Count)
+                    .ThenBy(k => k.Name, StringComparer.Ordinal)
+                    .ToList(),
                 Groups = groups,
             };
         }

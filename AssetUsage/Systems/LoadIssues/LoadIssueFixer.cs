@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Game;
 using Game.Buildings;
 using Game.Common;
 using Game.Companies;
@@ -7,17 +8,20 @@ using Game.Tools;
 using Unity.Collections;
 using Unity.Entities;
 using Unity.Mathematics;
+using AreaExtractor = Game.Areas.Extractor;
+using AreaStorage = Game.Areas.Storage;
 using AreaSurface = Game.Areas.Surface;
+using AreaTerrain = Game.Areas.Terrain;
 
 namespace AssetUsage.Systems.LoadIssues
 {
     public sealed class LoadIssueFixer
     {
         readonly EntityManager entityManager;
-        readonly ToolOutputBarrier barrier;
+        readonly EndFrameBarrier barrier;
         readonly EntityArchetype rentersUpdated;
 
-        public LoadIssueFixer(EntityManager entityManager, ToolOutputBarrier barrier)
+        public LoadIssueFixer(EntityManager entityManager, EndFrameBarrier barrier)
         {
             this.entityManager = entityManager;
             this.barrier = barrier;
@@ -26,38 +30,52 @@ namespace AssetUsage.Systems.LoadIssues
 
         public (int Changed, int Cleared) ReassignBrands()
         {
-            var commands = barrier.CreateCommandBuffer();
             var candidates = new Dictionary<Entity, List<Entity>>();
-            var refreshed = new HashSet<Entity>();
+            var updates = new List<(Entity Company, CompanyData Data)>();
+            var properties = new HashSet<Entity>();
             int changed = 0;
             int cleared = 0;
-            using var query = PlacedQuery(ComponentType.ReadOnly<CompanyData>(), ComponentType.ReadOnly<PrefabRef>());
-            using var entities = query.ToEntityArray(Allocator.TempJob);
-            using var companies = query.ToComponentDataArray<CompanyData>(Allocator.TempJob);
-            using var prefabs = query.ToComponentDataArray<PrefabRef>(Allocator.TempJob);
-            for (int i = 0; i < entities.Length; i++)
+            using (var query = PlacedQuery(ComponentType.ReadOnly<CompanyData>(), ComponentType.ReadOnly<PrefabRef>()))
+            using (var entities = query.ToEntityArray(Allocator.TempJob))
+            using (var companies = query.ToComponentDataArray<CompanyData>(Allocator.TempJob))
+            using (var prefabs = query.ToComponentDataArray<PrefabRef>(Allocator.TempJob))
             {
-                var company = companies[i];
-                if (!IsMissing(company.m_Brand))
+                for (int i = 0; i < entities.Length; i++)
                 {
-                    continue;
-                }
+                    var company = companies[i];
+                    if (!IsMissing(company.m_Brand))
+                    {
+                        continue;
+                    }
 
-                var brands = BrandsOf(prefabs[i].m_Prefab, candidates);
-                if (brands.Count > 0)
-                {
-                    var random = Random.CreateFromIndex((uint)entities[i].Index);
-                    company.m_Brand = brands[random.NextInt(brands.Count)];
-                    changed++;
-                }
-                else
-                {
-                    company.m_Brand = Entity.Null;
-                    cleared++;
-                }
+                    var brands = BrandsOf(prefabs[i].m_Prefab, candidates);
+                    if (brands.Count > 0)
+                    {
+                        var random = Random.CreateFromIndex((uint)entities[i].Index);
+                        company.m_Brand = brands[random.NextInt(brands.Count)];
+                        changed++;
+                    }
+                    else
+                    {
+                        company.m_Brand = Entity.Null;
+                        cleared++;
+                    }
 
-                commands.SetComponent(entities[i], company);
-                RefreshProperty(commands, entities[i], refreshed);
+                    updates.Add((entities[i], company));
+                    CollectProperty(entities[i], properties);
+                }
+            }
+
+            var commands = barrier.CreateCommandBuffer();
+            foreach (var (company, data) in updates)
+            {
+                commands.SetComponent(company, data);
+            }
+
+            foreach (var property in properties)
+            {
+                var notice = commands.CreateEntity(rentersUpdated);
+                commands.SetComponent(notice, new RentersUpdated(property));
             }
 
             return (changed, cleared);
@@ -65,8 +83,53 @@ namespace AssetUsage.Systems.LoadIssues
 
         public (int Removed, int Kept) RemoveSurfaces()
         {
+            var (targets, kept) = CollectMissingSurfaces();
             var commands = barrier.CreateCommandBuffer();
-            int removed = 0;
+            foreach (var surface in targets)
+            {
+                commands.AddComponent<Deleted>(surface);
+            }
+
+            return (targets.Count, kept);
+        }
+
+        public (int Replaced, int Kept) ReplaceSurfaces(Entity replacement)
+        {
+            var (targets, kept) = CollectMissingSurfaces();
+            var commands = barrier.CreateCommandBuffer();
+            foreach (var surface in targets)
+            {
+                commands.SetComponent(surface, new PrefabRef(replacement));
+                commands.AddComponent<Updated>(surface);
+            }
+
+            return (targets.Count, kept);
+        }
+
+        public bool IsPlainSurface(Entity prefab)
+        {
+            if (!IsLoaded(prefab) || !entityManager.HasComponent<AreaData>(prefab))
+            {
+                return false;
+            }
+
+            using var types = entityManager.GetComponentData<AreaData>(prefab).m_Archetype.GetComponentTypes(Allocator.Temp);
+            foreach (var type in types)
+            {
+                if (type == ComponentType.ReadWrite<AreaStorage>()
+                    || type == ComponentType.ReadWrite<AreaExtractor>()
+                    || type == ComponentType.ReadWrite<AreaTerrain>())
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        (List<Entity> Targets, int Kept) CollectMissingSurfaces()
+        {
+            var targets = new List<Entity>();
             int kept = 0;
             using var query = PlacedQuery(ComponentType.ReadOnly<AreaSurface>(), ComponentType.ReadOnly<PrefabRef>());
             using var entities = query.ToEntityArray(Allocator.TempJob);
@@ -78,39 +141,24 @@ namespace AssetUsage.Systems.LoadIssues
                     continue;
                 }
 
-                if (entityManager.HasComponent<Owner>(entities[i]))
+                if (IsPlainInstance(entities[i]))
                 {
-                    kept++;
+                    targets.Add(entities[i]);
                 }
                 else
                 {
-                    commands.AddComponent<Deleted>(entities[i]);
-                    removed++;
+                    kept++;
                 }
             }
 
-            return (removed, kept);
+            return (targets, kept);
         }
 
-        public int ReplaceSurfaces(Entity replacement)
-        {
-            var commands = barrier.CreateCommandBuffer();
-            int replaced = 0;
-            using var query = PlacedQuery(ComponentType.ReadOnly<AreaSurface>(), ComponentType.ReadOnly<PrefabRef>());
-            using var entities = query.ToEntityArray(Allocator.TempJob);
-            using var prefabs = query.ToComponentDataArray<PrefabRef>(Allocator.TempJob);
-            for (int i = 0; i < entities.Length; i++)
-            {
-                if (IsMissing(prefabs[i].m_Prefab))
-                {
-                    commands.SetComponent(entities[i], new PrefabRef(replacement));
-                    commands.AddComponent<Updated>(entities[i]);
-                    replaced++;
-                }
-            }
-
-            return replaced;
-        }
+        bool IsPlainInstance(Entity surface) =>
+            !entityManager.HasComponent<Owner>(surface)
+            && !entityManager.HasComponent<AreaStorage>(surface)
+            && !entityManager.HasComponent<AreaExtractor>(surface)
+            && !entityManager.HasComponent<AreaTerrain>(surface);
 
         List<Entity> BrandsOf(Entity companyPrefab, Dictionary<Entity, List<Entity>> cache)
         {
@@ -136,7 +184,7 @@ namespace AssetUsage.Systems.LoadIssues
             return brands;
         }
 
-        void RefreshProperty(EntityCommandBuffer commands, Entity company, HashSet<Entity> refreshed)
+        void CollectProperty(Entity company, HashSet<Entity> properties)
         {
             if (!entityManager.HasComponent<PropertyRenter>(company))
             {
@@ -144,10 +192,9 @@ namespace AssetUsage.Systems.LoadIssues
             }
 
             var property = entityManager.GetComponentData<PropertyRenter>(company).m_Property;
-            if (property != Entity.Null && entityManager.Exists(property) && refreshed.Add(property))
+            if (property != Entity.Null && entityManager.Exists(property))
             {
-                var notice = commands.CreateEntity(rentersUpdated);
-                commands.SetComponent(notice, new RentersUpdated(property));
+                properties.Add(property);
             }
         }
 
