@@ -111,13 +111,13 @@ const FixBar = ({ group }: { group: IssueGroup }) => {
                     <button className={styles.action} onClick={() => confirm(`Change the brand of ${group.count} companies?`, actions.changeBrands)}>Change all brands</button>
                 )}
                 {group.fixes.includes("remove") && (
-                    <button className={styles.action} onClick={() => confirm("Remove every missing surface that is not part of a building?", actions.removeSurfaces)}>Remove all</button>
+                    <button className={styles.action} onClick={() => confirm("Remove every missing surface, including those inside buildings?", actions.removeSurfaces)}>Remove all</button>
                 )}
                 {group.fixes.includes("replace") && (
                     <button className={styles.action} onClick={() => setChoosing(!choosing)}>Replace all</button>
                 )}
             </div>
-            {choosing && <SurfacePicker onPick={(surface) => confirm(`Replace every missing surface that is not part of a building with ${surface.name}?`, () => actions.replaceSurfaces(surface.id))} />}
+            {choosing && <SurfacePicker onPick={(surface) => confirm(`Replace every missing surface, including those inside buildings, with ${surface.name}?`, () => actions.replaceSurfaces(surface.id))} />}
         </>
     );
 };

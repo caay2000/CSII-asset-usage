@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.9 (2026-11-22)
+- Cambiar marcas: una empresa sin ninguna marca compatible se deja como está, para que el juego no muestre su nombre como
+  "brand is null".
+- Eliminar o sustituir superficies incluye ahora las que están dentro de edificios. Solo se excluyen las áreas de
+  almacén, extracción y terreno.
+
 ## 0.1.8 (2026-11-22)
 - Panel de problemas de carga agrupado por tipo de error y, dentro, por mod.
 - Aviso al cargar una ciudad con problemas, con botones para abrir el panel o saltarlo.

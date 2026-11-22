@@ -289,14 +289,14 @@ namespace AssetUsage.Systems.LoadIssues
 
         void ChangeBrands() => ApplyFix(() =>
         {
-            var (changedCount, cleared) = fixer.ReassignBrands();
-            return $"Changed the brand of {changedCount} companies, cleared {cleared} without an available brand.";
+            var (changedCount, skipped) = fixer.ReassignBrands();
+            return $"Changed the brand of {changedCount} companies, left {skipped} unchanged because no compatible brand is loaded.";
         });
 
         void RemoveSurfaces() => ApplyFix(() =>
         {
             var (removed, kept) = fixer.RemoveSurfaces();
-            return $"Removed {removed} surfaces, kept {kept} that belong to a building or lot.";
+            return $"Removed {removed} surfaces, kept {kept} storage, extractor or terrain areas.";
         });
 
         void ReplaceSurfaces(string id) => ApplyFix(() =>
@@ -307,7 +307,7 @@ namespace AssetUsage.Systems.LoadIssues
             }
 
             var (replaced, kept) = fixer.ReplaceSurfaces(replacement);
-            return $"Replaced {replaced} surfaces with {PrefabIds.Name(id)}, kept {kept} that belong to a building or lot.";
+            return $"Replaced {replaced} surfaces with {PrefabIds.Name(id)}, kept {kept} storage, extractor or terrain areas.";
         });
 
         void ApplyFix(Func<string> fix)
