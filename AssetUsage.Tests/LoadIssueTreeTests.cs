@@ -33,10 +33,10 @@ namespace AssetUsage.Tests
 
             var tree = LoadIssueTree.Build(report, null);
 
-            var mod = Assert.Single(tree.Mods);
+            var mod = Assert.Single(Assert.Single(tree.Groups).Mods);
             Assert.Equal("Mod:160092", mod.Name);
             Assert.Equal(3, mod.Count);
-            var prefab = Assert.Single(Assert.Single(mod.Types).Prefabs);
+            var prefab = Assert.Single(mod.Prefabs);
             Assert.Equal("House", prefab.Name);
             Assert.Equal(2, prefab.Located);
             Assert.Equal(1, prefab.Unlocated);
@@ -52,7 +52,7 @@ namespace AssetUsage.Tests
             report.AddReference(Brand, "Company", new CaseRef(2, 1), true);
             var origins = new Origins(new Dictionary<string, string> { ["BuildingPrefab:House"] = "pack-a" });
 
-            var names = LoadIssueTree.Build(report, origins).Mods.Select(m => m.Name).ToList();
+            var names = LoadIssueTree.Build(report, origins).Groups.SelectMany(g => g.Mods).Select(m => m.Name).ToList();
 
             Assert.Contains("pack-a", names);
             Assert.Contains("Unknown pack (c460)", names);
@@ -66,13 +66,40 @@ namespace AssetUsage.Tests
             report.AddReference(Building, "PrefabRef", entity, true);
             report.AddDependency(Zone, Building);
 
-            var zone = LoadIssueTree.Build(report, null).Mods.SelectMany(m => m.Types).Single(t => t.Category == "Zone").Prefabs.Single();
+            var zone = LoadIssueTree.Build(report, null).Groups.Single(g => g.Category == "Zone").Mods.Single().Prefabs.Single();
             Assert.Equal(new[] { "House" }, zone.KeptAliveBy);
 
             var building = report.Missing.Single(i => i.Id == Building);
             building.Remove(building.Located.Single());
 
-            Assert.Empty(LoadIssueTree.Build(report, null).Mods);
+            Assert.Empty(LoadIssueTree.Build(report, null).Groups);
+        }
+
+        [Fact]
+        public void Groups_by_error_type_then_mod()
+        {
+            var report = new LoadIssueReport();
+            report.AddReference("BrandPrefab:Cafe (c460)", "Company", new CaseRef(1, 1), true);
+            report.AddReference("BrandPrefab:Shop (a2c8)", "Company", new CaseRef(2, 1), true);
+            report.AddReference("SurfacePrefab:Golf (c0fa)", "PrefabRef", new CaseRef(3, 1), true);
+
+            var tree = LoadIssueTree.Build(report, null);
+
+            Assert.Equal(new[] { "Surface", "Brand" }, tree.Groups.Select(g => g.Category));
+            var brands = tree.Groups.Single(g => g.Category == "Brand");
+            Assert.Equal(2, brands.Count);
+            Assert.Equal(2, brands.Mods.Count);
+            Assert.Equal(3, tree.Total);
+        }
+
+        [Theory]
+        [InlineData(LoadIssueCategory.Brand, new[] { LoadIssueFixes.ChangeBrand })]
+        [InlineData(LoadIssueCategory.Surface, new[] { LoadIssueFixes.Remove, LoadIssueFixes.Replace })]
+        [InlineData(LoadIssueCategory.Object, new string[0])]
+        [InlineData(LoadIssueCategory.Building, new string[0])]
+        public void Offers_only_the_bulk_fixes_of_each_type(LoadIssueCategory category, string[] expected)
+        {
+            Assert.Equal(expected, LoadIssueFixes.For(category));
         }
 
         [Fact]

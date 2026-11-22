@@ -23,6 +23,7 @@ namespace AssetUsage.Systems.LoadIssues
         public const string PrefabRefKind = "PrefabRef";
         public const string UnderConstructionKind = "UnderConstruction";
         public const string CompanyKind = "Company";
+        const int MaxUnlocatedSamples = 3;
 
         readonly EntityManager entityManager;
         readonly PrefabSystem prefabSystem;
@@ -30,6 +31,8 @@ namespace AssetUsage.Systems.LoadIssues
         readonly LocationResolver locations;
         readonly Dictionary<Entity, string> missing = new Dictionary<Entity, string>();
         readonly Dictionary<string, Entity> prefabsById = new Dictionary<string, Entity>(StringComparer.Ordinal);
+        readonly Dictionary<string, int> sampledUnlocated = new Dictionary<string, int>(StringComparer.Ordinal);
+        readonly List<string> unlocatedSamples = new List<string>();
 
         public MissingPrefabScanner(EntityManager entityManager, PrefabSystem prefabSystem, LoadIssueReport report, LocationResolver locations)
         {
@@ -40,6 +43,8 @@ namespace AssetUsage.Systems.LoadIssues
         }
 
         public IReadOnlyDictionary<string, Entity> PrefabsById => prefabsById;
+
+        public IReadOnlyList<string> UnlocatedSamples => unlocatedSamples;
 
         public void Scan()
         {
@@ -123,8 +128,35 @@ namespace AssetUsage.Systems.LoadIssues
             }
         }
 
-        void AddReference(string id, string kind, Entity entity) =>
-            report.AddReference(id, kind, new CaseRef(entity.Index, entity.Version), locations.TryResolve(entity, out _));
+        void AddReference(string id, string kind, Entity entity)
+        {
+            bool located = locations.TryResolve(entity, out _);
+            report.AddReference(id, kind, new CaseRef(entity.Index, entity.Version), located);
+            if (!located && kind == PrefabRefKind)
+            {
+                SampleUnlocated(id, entity);
+            }
+        }
+
+        void SampleUnlocated(string id, Entity entity)
+        {
+            sampledUnlocated.TryGetValue(id, out int sampled);
+            if (sampled >= MaxUnlocatedSamples)
+            {
+                return;
+            }
+
+            sampledUnlocated[id] = sampled + 1;
+            using var types = entityManager.GetComponentTypes(entity, Allocator.Temp);
+            var names = new List<string>(types.Length);
+            foreach (var type in types)
+            {
+                names.Add(type.GetManagedType()?.Name ?? type.ToString());
+            }
+
+            names.Sort(StringComparer.Ordinal);
+            unlocatedSamples.Add($"Unlocated {id} entity {entity.Index}:{entity.Version} components: {string.Join(", ", names)}");
+        }
 
         void ScanBuffer<T>(string kind, params Func<T, Entity>[] targets)
             where T : unmanaged, IBufferElementData
