@@ -43,12 +43,14 @@ namespace AssetUsage.Systems.LoadIssues
         readonly EntityManager entityManager;
         readonly EndFrameBarrier barrier;
         readonly EntityArchetype rentersUpdated;
+        readonly BulldozerRecordCleaner bulldozerRecords;
 
         public LoadIssueFixer(EntityManager entityManager, EndFrameBarrier barrier)
         {
             this.entityManager = entityManager;
             this.barrier = barrier;
             rentersUpdated = entityManager.CreateArchetype(ComponentType.ReadWrite<Event>(), ComponentType.ReadWrite<RentersUpdated>());
+            bulldozerRecords = new BulldozerRecordCleaner(entityManager);
         }
 
         public (int Changed, int Skipped) ReassignBrands()
@@ -113,7 +115,7 @@ namespace AssetUsage.Systems.LoadIssues
             return (targets.Count, kept);
         }
 
-        public (int Removed, int Kept) RemoveObjects()
+        public (int Removed, int Kept, int Records) RemoveObjects()
         {
             var targets = new HashSet<Entity>();
             int kept = 0;
@@ -163,12 +165,13 @@ namespace AssetUsage.Systems.LoadIssues
             int removed = targets.Count;
             AddOwnedChildren(targets);
             var commands = barrier.CreateCommandBuffer();
+            int records = bulldozerRecords.Remove(commands, IsMissing);
             foreach (var target in targets)
             {
                 commands.AddComponent<Deleted>(target);
             }
 
-            return (removed, kept);
+            return (removed, kept, records);
         }
 
         void AddOwnedChildren(HashSet<Entity> targets)

@@ -105,7 +105,7 @@ const FixBar = ({ group }: { group: IssueGroup }) => {
                 <button className={styles.action} onClick={() => setPending({ text: "Change the missing brand of every company that has a compatible brand loaded?", run: actions.changeBrands })}>Change all brands</button>
             )}
             {group.fixes.includes("remove") && (
-                <button className={styles.action} onClick={() => setPending({ text: "Remove every missing object that has a position? Buildings, road objects, pillars and utilities are kept.", run: actions.removeObjects })}>Remove all</button>
+                <button className={styles.action} onClick={() => setPending({ text: "Remove every missing object that has a position, and the Better Bulldozer records of missing objects? Buildings, road objects, pillars and utilities are kept.", run: actions.removeObjects })}>Remove all</button>
             )}
         </div>
     );

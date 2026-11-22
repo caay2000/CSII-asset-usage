@@ -1,10 +1,13 @@
 # Changelog
 
+## 0.1.12 (2026-11-22)
+- `Remove all` de objetos limpia también los registros de Better Bulldozer de objetos que faltan y su entrada en el
+  edificio. Solo se aplica al pulsar el botón. Si se reinstala el mod del objeto, puede volver a aparecer en su edificio.
+
 ## 0.1.11 (2026-11-22)
 - El panel ya no salta solo al siguiente problema: al arreglar uno, sale de la lista y la cámara y la vista se quedan donde
   están.
 - `Remove` y `Replace` en cada superficie, en lugar de un botón para todas.
-- Los registros internos de Better Bulldozer ya no se cuentan como objetos que faltan. No son objetos del mapa.
 
 ## 0.1.10 (2026-11-22)
 - Botón `Remove all` para los objetos que faltan y tienen posición, con confirmación. No toca edificios, ni objetos de

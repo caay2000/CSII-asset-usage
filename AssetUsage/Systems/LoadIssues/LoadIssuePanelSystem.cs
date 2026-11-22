@@ -226,8 +226,8 @@ namespace AssetUsage.Systems.LoadIssues
 
         void RemoveObjects() => ApplyFix(() =>
         {
-            var (removed, kept) = fixer.RemoveObjects();
-            return $"Removed {removed} objects, kept {kept} owned by a road or similar. Road, pillar and utility objects stay listed.";
+            var (removed, kept, records) = fixer.RemoveObjects();
+            return $"Removed {removed} objects and {records} Better Bulldozer records, kept {kept} owned by a road or similar. Road, pillar and utility objects stay listed.";
         });
 
         void ReplaceSurface(string id, string replacementId) => ApplyFix(() =>
@@ -304,7 +304,7 @@ namespace AssetUsage.Systems.LoadIssues
                 prefabsById = scanner.PrefabsById;
                 ResetSweep();
                 double elapsed = watch.Elapsed.TotalMilliseconds;
-                foreach (string line in logDetails ? report.Lines(elapsed).Concat(scanner.UnlocatedSamples).Append($"Ignored {scanner.BulldozerRecords} Better Bulldozer removal records.") : new[] { report.Summary(elapsed) })
+                foreach (string line in logDetails ? report.Lines(elapsed).Concat(scanner.UnlocatedSamples) : new[] { report.Summary(elapsed) })
                 {
                     Mod.Log.Info(line);
                 }

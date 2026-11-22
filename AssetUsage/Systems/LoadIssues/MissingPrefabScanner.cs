@@ -24,7 +24,6 @@ namespace AssetUsage.Systems.LoadIssues
         public const string UnderConstructionKind = "UnderConstruction";
         public const string CompanyKind = "Company";
         const int MaxUnlocatedSamples = 3;
-        const string BulldozerRecordType = "Better_Bulldozer.Components.OwnerRecord";
 
         readonly EntityManager entityManager;
         readonly PrefabSystem prefabSystem;
@@ -46,8 +45,6 @@ namespace AssetUsage.Systems.LoadIssues
         public IReadOnlyDictionary<string, Entity> PrefabsById => prefabsById;
 
         public IReadOnlyList<string> UnlocatedSamples => unlocatedSamples;
-
-        public int BulldozerRecords { get; private set; }
 
         public void Scan()
         {
@@ -134,31 +131,11 @@ namespace AssetUsage.Systems.LoadIssues
         void AddReference(string id, string kind, Entity entity)
         {
             bool located = locations.TryResolve(entity, out _);
-            if (!located && kind == PrefabRefKind && IsBulldozerRecord(entity))
-            {
-                BulldozerRecords++;
-                return;
-            }
-
             report.AddReference(id, kind, new CaseRef(entity.Index, entity.Version), located);
             if (!located && kind == PrefabRefKind)
             {
                 SampleUnlocated(id, entity);
             }
-        }
-
-        bool IsBulldozerRecord(Entity entity)
-        {
-            using var types = entityManager.GetComponentTypes(entity, Allocator.Temp);
-            foreach (var type in types)
-            {
-                if (type.GetManagedType()?.FullName == BulldozerRecordType)
-                {
-                    return true;
-                }
-            }
-
-            return false;
         }
 
         void SampleUnlocated(string id, Entity entity)
