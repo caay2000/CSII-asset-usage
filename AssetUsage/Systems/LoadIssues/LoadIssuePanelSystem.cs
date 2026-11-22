@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using AssetUsage.Core.LoadIssues;
 using Colossal.Serialization.Entities;
 using Colossal.UI.Binding;
@@ -35,7 +34,11 @@ namespace AssetUsage.Systems.LoadIssues
         }
 
         readonly IPrefabOriginLookup origins = new LedgerOrigins();
-        readonly Queue<Action> sweep = new Queue<Action>();
+        readonly List<MissingPrefabIssue> sweepIssues = new List<MissingPrefabIssue>();
+        int sweepIssue;
+        int sweepCase;
+        int sweepNode;
+        bool sweepFailed;
         PrefabSystem prefabSystem;
         SelectedInfoUISystem selectedInfo;
         LocationResolver locations;
@@ -78,7 +81,7 @@ namespace AssetUsage.Systems.LoadIssues
         protected override void OnUpdate()
         {
             base.OnUpdate();
-            if (!open.value || report == null || UnityEngine.Time.realtimeSinceStartup < nextSweep)
+            if (!open.value || report == null || sweepFailed || UnityEngine.Time.realtimeSinceStartup < nextSweep)
             {
                 return;
             }
@@ -91,15 +94,35 @@ namespace AssetUsage.Systems.LoadIssues
             catch (Exception e)
             {
                 Mod.Log.Error(e);
-                sweep.Clear();
+                sweepFailed = true;
             }
+        }
+
+        void ResetSweep()
+        {
+            sweepIssues.Clear();
+            if (report != null)
+            {
+                sweepIssues.AddRange(report.Missing);
+            }
+
+            RestartSweepPass();
+            sweepFailed = false;
+            changed = false;
+        }
+
+        void RestartSweepPass()
+        {
+            sweepIssue = 0;
+            sweepCase = 0;
+            sweepNode = 0;
         }
 
         void Clear()
         {
             report = null;
             prefabsById = null;
-            sweep.Clear();
+            ResetSweep();
             open.Update(false);
             tree.Update("{}");
         }
@@ -114,7 +137,6 @@ namespace AssetUsage.Systems.LoadIssues
 
         void Scan(bool logDetails)
         {
-            sweep.Clear();
             try
             {
                 var watch = Stopwatch.StartNew();
@@ -124,6 +146,7 @@ namespace AssetUsage.Systems.LoadIssues
                 new BrokenNodeScanner(EntityManager, scanned).Scan();
                 report = scanned;
                 prefabsById = scanner.PrefabsById;
+                ResetSweep();
                 double elapsed = watch.Elapsed.TotalMilliseconds;
                 foreach (string line in logDetails ? report.Lines(elapsed) : new[] { report.Summary(elapsed) })
                 {
@@ -137,6 +160,7 @@ namespace AssetUsage.Systems.LoadIssues
                 Mod.Log.Error(e);
                 report = null;
                 prefabsById = null;
+                ResetSweep();
                 tree.Update(JsonConvert.SerializeObject(new LoadIssueTree { Error = "The scan failed. See asset-usage.log." }, JsonSettings));
             }
         }
@@ -147,7 +171,7 @@ namespace AssetUsage.Systems.LoadIssues
         {
             if (report != null)
             {
-                Focus(report.Step(id, delta));
+                Navigate(() => report.Step(id, delta), () => report.RemoveCurrent(id, delta));
             }
         }
 
@@ -155,18 +179,24 @@ namespace AssetUsage.Systems.LoadIssues
         {
             if (report != null)
             {
-                Focus(report.StepBrokenNode(delta));
+                Navigate(() => report.StepBrokenNode(delta), () => report.RemoveCurrentBrokenNode(delta));
             }
         }
 
-        void Focus(CaseRef? target)
+        void Navigate(Func<CaseRef?> step, Action removeCurrent)
         {
             try
             {
-                if (target.HasValue && locations.TryResolve(ToEntity(target.Value), out var location))
+                for (var target = step(); target.HasValue; target = step())
                 {
-                    selectedInfo.SetSelection(location);
-                    selectedInfo.Focus(location);
+                    if (locations.TryResolve(ToEntity(target.Value), out var location))
+                    {
+                        selectedInfo.SetSelection(location);
+                        selectedInfo.Focus(location);
+                        break;
+                    }
+
+                    removeCurrent();
                 }
 
                 Publish();
@@ -179,54 +209,63 @@ namespace AssetUsage.Systems.LoadIssues
 
         void Sweep()
         {
-            if (sweep.Count == 0)
-            {
-                QueueSweep();
-            }
-
             var watch = Stopwatch.StartNew();
-            while (sweep.Count > 0 && watch.Elapsed.TotalMilliseconds < SweepBudgetMilliseconds)
+            while (watch.Elapsed.TotalMilliseconds < SweepBudgetMilliseconds)
             {
-                sweep.Dequeue()();
+                if (!SweepNext())
+                {
+                    RestartSweepPass();
+                    break;
+                }
             }
 
-            if (changed && sweep.Count == 0)
+            if (changed)
             {
                 changed = false;
                 Publish();
             }
         }
 
-        void QueueSweep()
+        bool SweepNext()
         {
-            foreach (var issue in report.Missing)
+            while (sweepIssue < sweepIssues.Count)
             {
-                foreach (var located in issue.Located.ToList())
+                var issue = sweepIssues[sweepIssue];
+                if (sweepCase < issue.Located.Count)
                 {
-                    sweep.Enqueue(() => CheckCase(issue, located));
+                    var located = issue.Located[sweepCase];
+                    if (!StillReferences(ToEntity(located.Entity), located.Kind, issue.Id) && issue.Remove(located))
+                    {
+                        changed = true;
+                    }
+                    else
+                    {
+                        sweepCase++;
+                    }
+
+                    return true;
                 }
+
+                sweepIssue++;
+                sweepCase = 0;
             }
 
-            foreach (var node in report.BrokenNodes.ToList())
+            if (sweepNode < report.BrokenNodes.Count)
             {
-                sweep.Enqueue(() => CheckNode(node));
-            }
-        }
+                var node = report.BrokenNodes[sweepNode];
+                if (IsGone(ToEntity(node)) && report.RemoveBrokenNode(node))
+                {
+                    changed = true;
+                }
+                else
+                {
+                    sweepNode++;
+                }
 
-        void CheckCase(MissingPrefabIssue issue, LocatedCase located)
-        {
-            if (!StillReferences(ToEntity(located.Entity), located.Kind, issue.Id) && issue.Remove(located))
-            {
-                changed = true;
+                return true;
             }
-        }
 
-        void CheckNode(CaseRef node)
-        {
-            if (IsGone(ToEntity(node)) && report.RemoveBrokenNode(node))
-            {
-                changed = true;
-            }
+            return false;
         }
 
         bool IsGone(Entity entity) => !EntityManager.Exists(entity) || EntityManager.HasComponent<Deleted>(entity);

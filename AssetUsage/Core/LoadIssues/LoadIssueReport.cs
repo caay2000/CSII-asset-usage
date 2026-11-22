@@ -92,11 +92,31 @@ namespace AssetUsage.Core.LoadIssues
 
         public bool Remove(LocatedCase located)
         {
-            if (!Located.Remove(located))
+            int index = Located.IndexOf(located);
+            if (index < 0)
             {
                 return false;
             }
 
+            Forget(index);
+            Cursor = CaseCursor.AfterRemoving(Cursor, index, Located.Count);
+            return true;
+        }
+
+        public void RemoveCurrent(int delta)
+        {
+            if (Cursor > 0 && Cursor <= Located.Count)
+            {
+                int current = Cursor;
+                Forget(current - 1);
+                Cursor = CaseCursor.BeforeNextStep(current, delta, Located.Count);
+            }
+        }
+
+        void Forget(int index)
+        {
+            var located = Located[index];
+            Located.RemoveAt(index);
             seen.Remove((located.Kind, located.Entity));
             int remaining = References[located.Kind] - 1;
             if (remaining > 0)
@@ -107,9 +127,6 @@ namespace AssetUsage.Core.LoadIssues
             {
                 References.Remove(located.Kind);
             }
-
-            Cursor = Math.Min(Cursor, Located.Count);
-            return true;
         }
 
         public CaseRef? Step(int delta)
@@ -134,6 +151,22 @@ namespace AssetUsage.Core.LoadIssues
             }
 
             return ((((cursor - 1 + delta) % count) + count) % count) + 1;
+        }
+
+        public static int AfterRemoving(int cursor, int removedIndex, int remaining)
+        {
+            int shifted = removedIndex + 1 < cursor ? cursor - 1 : cursor;
+            return Math.Min(shifted, remaining);
+        }
+
+        public static int BeforeNextStep(int removedCursor, int delta, int remaining)
+        {
+            if (remaining == 0)
+            {
+                return 0;
+            }
+
+            return delta >= 0 ? removedCursor - 1 : removedCursor;
         }
     }
 
@@ -188,12 +221,36 @@ namespace AssetUsage.Core.LoadIssues
 
         public bool RemoveBrokenNode(CaseRef node)
         {
-            bool removed = brokenNodes.Remove(node);
-            BrokenCursor = Math.Min(BrokenCursor, brokenNodes.Count);
-            return removed;
+            int index = brokenNodes.IndexOf(node);
+            if (index < 0)
+            {
+                return false;
+            }
+
+            brokenNodes.RemoveAt(index);
+            BrokenCursor = CaseCursor.AfterRemoving(BrokenCursor, index, brokenNodes.Count);
+            return true;
         }
 
         public CaseRef? Step(string id, int delta) => missing.TryGetValue(id, out var issue) ? issue.Step(delta) : null;
+
+        public void RemoveCurrent(string id, int delta)
+        {
+            if (missing.TryGetValue(id, out var issue))
+            {
+                issue.RemoveCurrent(delta);
+            }
+        }
+
+        public void RemoveCurrentBrokenNode(int delta)
+        {
+            if (BrokenCursor > 0 && BrokenCursor <= brokenNodes.Count)
+            {
+                int current = BrokenCursor;
+                brokenNodes.RemoveAt(current - 1);
+                BrokenCursor = CaseCursor.BeforeNextStep(current, delta, brokenNodes.Count);
+            }
+        }
 
         public CaseRef? StepBrokenNode(int delta)
         {
