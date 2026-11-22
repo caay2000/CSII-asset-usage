@@ -95,7 +95,7 @@ namespace AssetUsage.Tests
         [Theory]
         [InlineData(LoadIssueCategory.Brand, new[] { LoadIssueFixes.ChangeBrand })]
         [InlineData(LoadIssueCategory.Surface, new[] { LoadIssueFixes.Remove, LoadIssueFixes.Replace })]
-        [InlineData(LoadIssueCategory.Object, new string[0])]
+        [InlineData(LoadIssueCategory.Object, new[] { LoadIssueFixes.Remove })]
         [InlineData(LoadIssueCategory.Building, new string[0])]
         public void Offers_only_the_bulk_fixes_of_each_type(LoadIssueCategory category, string[] expected)
         {

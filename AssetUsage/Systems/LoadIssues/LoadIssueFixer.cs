@@ -19,6 +19,8 @@ namespace AssetUsage.Systems.LoadIssues
 {
     public sealed class LoadIssueFixer
     {
+        const int MaxOwnerDepth = 8;
+
         static readonly ComponentType[] SimulationAreaTypes =
         {
             ComponentType.ReadWrite<AreaStorage>(),
@@ -109,6 +111,87 @@ namespace AssetUsage.Systems.LoadIssues
             }
 
             return (targets.Count, kept);
+        }
+
+        public (int Removed, int Kept) RemoveObjects()
+        {
+            var targets = new List<Entity>();
+            int kept = 0;
+            using (var query = entityManager.CreateEntityQuery(new EntityQueryDesc
+            {
+                All = new[]
+                {
+                    ComponentType.ReadOnly<Game.Objects.Object>(),
+                    ComponentType.ReadOnly<Game.Objects.Static>(),
+                    ComponentType.ReadOnly<Game.Objects.Transform>(),
+                    ComponentType.ReadOnly<PrefabRef>(),
+                },
+                None = new[]
+                {
+                    ComponentType.ReadOnly<Temp>(),
+                    ComponentType.ReadOnly<Deleted>(),
+                    ComponentType.ReadOnly<PrefabData>(),
+                    ComponentType.ReadOnly<Building>(),
+                    ComponentType.ReadOnly<Game.Objects.NetObject>(),
+                    ComponentType.ReadOnly<Game.Objects.Pillar>(),
+                    ComponentType.ReadOnly<Game.Objects.UtilityObject>(),
+                    ComponentType.ReadOnly<Game.Objects.OutsideConnection>(),
+                    ComponentType.ReadOnly<Game.Objects.Placeholder>(),
+                },
+            }))
+            using (var entities = query.ToEntityArray(Allocator.TempJob))
+            using (var prefabs = query.ToComponentDataArray<PrefabRef>(Allocator.TempJob))
+            {
+                for (int i = 0; i < entities.Length; i++)
+                {
+                    if (!IsMissing(prefabs[i].m_Prefab))
+                    {
+                        continue;
+                    }
+
+                    if (IsStandaloneOrInBuilding(entities[i]))
+                    {
+                        targets.Add(entities[i]);
+                    }
+                    else
+                    {
+                        kept++;
+                    }
+                }
+            }
+
+            var commands = barrier.CreateCommandBuffer();
+            foreach (var target in targets)
+            {
+                commands.AddComponent<Deleted>(target);
+            }
+
+            return (targets.Count, kept);
+        }
+
+        bool IsStandaloneOrInBuilding(Entity entity)
+        {
+            var current = entity;
+            for (int depth = 0; depth < MaxOwnerDepth; depth++)
+            {
+                if (!entityManager.HasComponent<Owner>(current))
+                {
+                    return depth == 0;
+                }
+
+                current = entityManager.GetComponentData<Owner>(current).m_Owner;
+                if (current == Entity.Null || !entityManager.Exists(current))
+                {
+                    return false;
+                }
+
+                if (entityManager.HasComponent<Building>(current))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         public (int Replaced, int Kept) ReplaceSurfaces(Entity replacement)

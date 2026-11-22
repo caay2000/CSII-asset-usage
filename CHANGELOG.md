@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.10 (2026-11-22)
+- Botón `Remove all` para los objetos que faltan y tienen posición, con confirmación. No toca edificios, ni objetos de
+  carreteras, pilares, servicios o conexiones exteriores.
+
 ## 0.1.9 (2026-11-22)
 - Cambiar marcas: una empresa sin ninguna marca compatible se deja como está, para que el juego no muestre su nombre como
   "brand is null".
