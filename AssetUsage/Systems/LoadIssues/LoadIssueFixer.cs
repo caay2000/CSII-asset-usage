@@ -28,13 +28,13 @@ namespace AssetUsage.Systems.LoadIssues
             rentersUpdated = entityManager.CreateArchetype(ComponentType.ReadWrite<Event>(), ComponentType.ReadWrite<RentersUpdated>());
         }
 
-        public (int Changed, int Cleared) ReassignBrands()
+        public (int Changed, int Skipped) ReassignBrands()
         {
             var candidates = new Dictionary<Entity, List<Entity>>();
             var updates = new List<(Entity Company, CompanyData Data)>();
             var properties = new HashSet<Entity>();
             int changed = 0;
-            int cleared = 0;
+            int skipped = 0;
             using (var query = PlacedQuery(ComponentType.ReadOnly<CompanyData>(), ComponentType.ReadOnly<PrefabRef>()))
             using (var entities = query.ToEntityArray(Allocator.TempJob))
             using (var companies = query.ToComponentDataArray<CompanyData>(Allocator.TempJob))
@@ -49,18 +49,15 @@ namespace AssetUsage.Systems.LoadIssues
                     }
 
                     var brands = BrandsOf(prefabs[i].m_Prefab, candidates);
-                    if (brands.Count > 0)
+                    if (brands.Count == 0)
                     {
-                        var random = Random.CreateFromIndex((uint)entities[i].Index);
-                        company.m_Brand = brands[random.NextInt(brands.Count)];
-                        changed++;
-                    }
-                    else
-                    {
-                        company.m_Brand = Entity.Null;
-                        cleared++;
+                        skipped++;
+                        continue;
                     }
 
+                    var random = Random.CreateFromIndex((uint)entities[i].Index);
+                    company.m_Brand = brands[random.NextInt(brands.Count)];
+                    changed++;
                     updates.Add((entities[i], company));
                     CollectProperty(entities[i], properties);
                 }
@@ -78,7 +75,7 @@ namespace AssetUsage.Systems.LoadIssues
                 commands.SetComponent(notice, new RentersUpdated(property));
             }
 
-            return (changed, cleared);
+            return (changed, skipped);
         }
 
         public (int Removed, int Kept) RemoveSurfaces()
@@ -155,8 +152,7 @@ namespace AssetUsage.Systems.LoadIssues
         }
 
         bool IsPlainInstance(Entity surface) =>
-            !entityManager.HasComponent<Owner>(surface)
-            && !entityManager.HasComponent<AreaStorage>(surface)
+            !entityManager.HasComponent<AreaStorage>(surface)
             && !entityManager.HasComponent<AreaExtractor>(surface)
             && !entityManager.HasComponent<AreaTerrain>(surface);
 

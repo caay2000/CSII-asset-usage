@@ -4,7 +4,7 @@
     <LangVersion>9.0</LangVersion>
     <AssemblyName>AssetUsage</AssemblyName>
     <RootNamespace>AssetUsage</RootNamespace>
-    <Version>0.1.8</Version>
+    <Version>0.1.9</Version>
     <DefaultItemExcludes>$(DefaultItemExcludes);UI/**</DefaultItemExcludes>
     <Nullable>disable</Nullable>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
