@@ -112,6 +112,70 @@ namespace AssetUsage.Tests
         }
 
         [Fact]
+        public void Removing_an_earlier_case_keeps_the_cursor_on_the_same_case()
+        {
+            var report = new LoadIssueReport();
+            report.AddReference(Building, "PrefabRef", new CaseRef(1, 1), true);
+            report.AddReference(Building, "PrefabRef", new CaseRef(2, 1), true);
+            report.AddReference(Building, "PrefabRef", new CaseRef(3, 1), true);
+            report.Step(Building, 1);
+            report.Step(Building, 1);
+            var issue = report.Missing.Single();
+
+            issue.Remove(issue.Located[0]);
+
+            Assert.Equal(1, issue.Cursor);
+            Assert.Equal(new CaseRef(2, 1), issue.Located[issue.Cursor - 1].Entity);
+            Assert.Equal(new CaseRef(3, 1), report.Step(Building, 1));
+        }
+
+        [Theory]
+        [InlineData(1, 3)]
+        [InlineData(-1, 1)]
+        public void Removing_a_stale_current_case_lands_on_its_neighbour(int delta, int expected)
+        {
+            var report = new LoadIssueReport();
+            report.AddReference(Building, "PrefabRef", new CaseRef(1, 1), true);
+            report.AddReference(Building, "PrefabRef", new CaseRef(2, 1), true);
+            report.AddReference(Building, "PrefabRef", new CaseRef(3, 1), true);
+            report.Step(Building, 1);
+            report.Step(Building, 1);
+
+            report.RemoveCurrent(Building, delta);
+
+            Assert.Equal(new CaseRef(expected, 1), report.Step(Building, delta));
+        }
+
+        [Fact]
+        public void Removing_the_only_stale_case_ends_navigation()
+        {
+            var report = new LoadIssueReport();
+            report.AddReference(Building, "PrefabRef", new CaseRef(1, 1), true);
+            report.Step(Building, 1);
+
+            report.RemoveCurrent(Building, 1);
+
+            Assert.Null(report.Step(Building, 1));
+            Assert.Equal(0, report.Missing.Single().Cursor);
+        }
+
+        [Fact]
+        public void Removing_an_earlier_broken_node_keeps_the_cursor_on_the_same_node()
+        {
+            var report = new LoadIssueReport();
+            report.AddBrokenNode(new CaseRef(5, 1));
+            report.AddBrokenNode(new CaseRef(6, 1));
+            report.AddBrokenNode(new CaseRef(7, 1));
+            report.StepBrokenNode(1);
+            report.StepBrokenNode(1);
+
+            report.RemoveBrokenNode(new CaseRef(5, 1));
+
+            Assert.Equal(1, report.BrokenCursor);
+            Assert.Equal(new CaseRef(7, 1), report.StepBrokenNode(1));
+        }
+
+        [Fact]
         public void Broken_nodes_are_navigated_and_removed()
         {
             var report = new LoadIssueReport();
