@@ -111,7 +111,9 @@ const FixBar = ({ group }: { group: IssueGroup }) => {
                     <button className={styles.action} onClick={() => confirm("Change the missing brand of every company that has a compatible brand loaded?", actions.changeBrands)}>Change all brands</button>
                 )}
                 {group.fixes.includes("remove") && (
-                    <button className={styles.action} onClick={() => confirm("Remove every missing surface, including those inside buildings?", actions.removeSurfaces)}>Remove all</button>
+                    <button className={styles.action} onClick={() => group.category === "Object"
+                        ? confirm("Remove every missing object that has a position? Buildings are not removed.", actions.removeObjects)
+                        : confirm("Remove every missing surface, including those inside buildings?", actions.removeSurfaces)}>Remove all</button>
                 )}
                 {group.fixes.includes("replace") && (
                     <button className={styles.action} onClick={() => setChoosing(!choosing)}>Replace all</button>

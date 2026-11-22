@@ -81,6 +81,7 @@ namespace AssetUsage.Systems.LoadIssues
             AddBinding(new TriggerBinding<int>(Group, "stepNode", StepNode));
             AddBinding(new TriggerBinding(Group, "changeBrands", ChangeBrands));
             AddBinding(new TriggerBinding(Group, "removeSurfaces", RemoveSurfaces));
+            AddBinding(new TriggerBinding(Group, "removeObjects", RemoveObjects));
             AddBinding(new TriggerBinding<string>(Group, "replaceSurfaces", ReplaceSurfaces));
         }
 
@@ -297,6 +298,12 @@ namespace AssetUsage.Systems.LoadIssues
         {
             var (removed, kept) = fixer.RemoveSurfaces();
             return $"Removed {removed} surfaces, kept {kept} storage, extractor or terrain areas.";
+        });
+
+        void RemoveObjects() => ApplyFix(() =>
+        {
+            var (removed, kept) = fixer.RemoveObjects();
+            return $"Removed {removed} objects, kept {kept} that belong to a road or another non-building owner.";
         });
 
         void ReplaceSurfaces(string id) => ApplyFix(() =>

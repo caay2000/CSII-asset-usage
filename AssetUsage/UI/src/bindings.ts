@@ -60,5 +60,6 @@ export const actions = {
     stepNode: (delta: number) => trigger(G, "stepNode", delta),
     changeBrands: () => trigger(G, "changeBrands"),
     removeSurfaces: () => trigger(G, "removeSurfaces"),
+    removeObjects: () => trigger(G, "removeObjects"),
     replaceSurfaces: (id: string) => trigger(G, "replaceSurfaces", id),
 };

@@ -65,6 +65,8 @@ namespace AssetUsage.Core.LoadIssues
                     return new List<string> { ChangeBrand };
                 case LoadIssueCategory.Surface:
                     return new List<string> { Remove, Replace };
+                case LoadIssueCategory.Object:
+                    return new List<string> { Remove };
                 default:
                     return new List<string>();
             }
