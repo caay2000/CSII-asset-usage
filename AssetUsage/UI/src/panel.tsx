@@ -112,7 +112,7 @@ const FixBar = ({ group }: { group: IssueGroup }) => {
                 )}
                 {group.fixes.includes("remove") && (
                     <button className={styles.action} onClick={() => group.category === "Object"
-                        ? confirm("Remove every missing object that has a position? Buildings are not removed.", actions.removeObjects)
+                        ? confirm("Remove every missing object that has a position? Buildings, road objects, pillars and utilities are kept.", actions.removeObjects)
                         : confirm("Remove every missing surface, including those inside buildings?", actions.removeSurfaces)}>Remove all</button>
                 )}
                 {group.fixes.includes("replace") && (
