@@ -4,7 +4,8 @@
     <LangVersion>9.0</LangVersion>
     <AssemblyName>AssetUsage</AssemblyName>
     <RootNamespace>AssetUsage</RootNamespace>
-    <Version>0.1.6</Version>
+    <Version>0.1.7</Version>
+    <DefaultItemExcludes>$(DefaultItemExcludes);UI/**</DefaultItemExcludes>
     <Nullable>disable</Nullable>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <ManagedPath Condition="'$(ManagedPath)' == ''">/mnt/c/Program Files (x86)/Steam/steamapps/common/Cities Skylines II/Cities2_Data/Managed</ManagedPath>
@@ -21,6 +22,9 @@
     <Reference Include="Colossal.Logging"><HintPath>$(ManagedPath)/Colossal.Logging.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Colossal.IO.AssetDatabase"><HintPath>$(ManagedPath)/Colossal.IO.AssetDatabase.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Colossal.PSI.Common"><HintPath>$(ManagedPath)/Colossal.PSI.Common.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Colossal.UI"><HintPath>$(ManagedPath)/Colossal.UI.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Colossal.UI.Binding"><HintPath>$(ManagedPath)/Colossal.UI.Binding.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Colossal.Mathematics"><HintPath>$(ManagedPath)/Colossal.Mathematics.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Newtonsoft.Json"><HintPath>$(ManagedPath)/Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.Collections"><HintPath>$(ManagedPath)/Unity.Collections.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Unity.Entities"><HintPath>$(ManagedPath)/Unity.Entities.dll</HintPath><Private>false</Private></Reference>
@@ -33,5 +37,8 @@
       <Out Include="$(OutDir)AssetUsage.dll;$(OutDir)AssetUsage.pdb" />
     </ItemGroup>
     <Copy SourceFiles="@(Out)" DestinationFolder="$(LocalModsPath)" />
+    <Exec Command="npm ci --no-audit --no-fund" WorkingDirectory="UI" Condition="!Exists('UI/node_modules')" />
+    <Exec Command="npx webpack" WorkingDirectory="UI" EnvironmentVariables="AU_OUT=$(LocalModsPath)" />
+    <Copy SourceFiles="UI/icon.svg" DestinationFolder="$(LocalModsPath)" />
   </Target>
 </Project>

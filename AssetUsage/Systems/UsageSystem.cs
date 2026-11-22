@@ -168,10 +168,22 @@ namespace AssetUsage.Systems
             Storage.Enqueue($"usage ({reason}: {direct.Count} prefabs used directly, {frames} frames with new entities{scope})", () =>
             {
                 var indirect = inventory != null ? Propagation.Indirect(direct, inventory.RefsOf) : new Dictionary<string, List<string>>();
-                ledger.Record(cityId, cityName, day, direct, indirect, key => inventory != null && inventory.Prefabs.TryGetValue(key, out var p) ? p : null);
+                lock (ledger)
+                {
+                    ledger.Record(cityId, cityName, day, direct, indirect, key => inventory != null && inventory.Prefabs.TryGetValue(key, out var p) ? p : null);
+                }
+
                 Mod.Log.Info($"Usage history: {ledger.Prefabs.Count} prefabs in {ledger.Cities.Count} cities ({indirect.Count} used indirectly in this city).");
                 return ledger;
             }, Storage.UsagePath);
+        }
+
+        public string FindPack(string prefabKey)
+        {
+            lock (ledger)
+            {
+                return ledger.Prefabs.TryGetValue(prefabKey, out var usage) && usage.Packs.Count > 0 ? usage.Packs[0] : null;
+            }
         }
 
         void RefreshInventory()

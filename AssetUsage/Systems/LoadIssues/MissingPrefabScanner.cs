@@ -20,17 +20,26 @@ namespace AssetUsage.Systems.LoadIssues
 {
     public sealed class MissingPrefabScanner
     {
+        public const string PrefabRefKind = "PrefabRef";
+        public const string UnderConstructionKind = "UnderConstruction";
+        public const string CompanyKind = "Company";
+
         readonly EntityManager entityManager;
         readonly PrefabSystem prefabSystem;
         readonly LoadIssueReport report;
+        readonly LocationResolver locations;
         readonly Dictionary<Entity, string> missing = new Dictionary<Entity, string>();
+        readonly Dictionary<string, Entity> prefabsById = new Dictionary<string, Entity>(StringComparer.Ordinal);
 
-        public MissingPrefabScanner(EntityManager entityManager, PrefabSystem prefabSystem, LoadIssueReport report)
+        public MissingPrefabScanner(EntityManager entityManager, PrefabSystem prefabSystem, LoadIssueReport report, LocationResolver locations)
         {
             this.entityManager = entityManager;
             this.prefabSystem = prefabSystem;
             this.report = report;
+            this.locations = locations;
         }
+
+        public IReadOnlyDictionary<string, Entity> PrefabsById => prefabsById;
 
         public void Scan()
         {
@@ -59,6 +68,7 @@ namespace AssetUsage.Systems.LoadIssues
                 {
                     string id = prefabSystem.GetObsoleteID(data[i]).ToString();
                     missing[entities[i]] = id;
+                    prefabsById[id] = entities[i];
                     report.AddMissing(id);
                 }
             }
@@ -66,9 +76,9 @@ namespace AssetUsage.Systems.LoadIssues
 
         void ScanDirectReferences()
         {
-            ScanComponent<PrefabRef>("PrefabRef", c => c.m_Prefab);
-            ScanComponent<UnderConstruction>("UnderConstruction", c => c.m_NewPrefab);
-            ScanComponent<CompanyData>("Company", c => c.m_Brand);
+            ScanComponent<PrefabRef>(PrefabRefKind, c => c.m_Prefab);
+            ScanComponent<UnderConstruction>(UnderConstructionKind, c => c.m_NewPrefab);
+            ScanComponent<CompanyData>(CompanyKind, c => c.m_Brand);
             ScanComponent<EditorContainerData>("EditorContainer", c => c.m_Prefab);
             ScanComponent<ChirpData>("Chirp", c => c.m_Sender);
             ScanBuffer<Policy>("Policy", c => c.m_Policy);
@@ -108,10 +118,13 @@ namespace AssetUsage.Systems.LoadIssues
 
                 if (lastId != null)
                 {
-                    report.AddReference(lastId, kind, Label(entities[i]));
+                    AddReference(lastId, kind, entities[i]);
                 }
             }
         }
+
+        void AddReference(string id, string kind, Entity entity) =>
+            report.AddReference(id, kind, new CaseRef(entity.Index, entity.Version), locations.TryResolve(entity, out _));
 
         void ScanBuffer<T>(string kind, params Func<T, Entity>[] targets)
             where T : unmanaged, IBufferElementData
@@ -127,7 +140,7 @@ namespace AssetUsage.Systems.LoadIssues
                     {
                         if (missing.TryGetValue(target(buffer[j]), out string id))
                         {
-                            report.AddReference(id, kind, Label(entities[i]));
+                            AddReference(id, kind, entities[i]);
                         }
                     }
                 }
@@ -160,7 +173,5 @@ namespace AssetUsage.Systems.LoadIssues
         });
 
         string SourceName(Entity entity) => missing.TryGetValue(entity, out string id) ? id : prefabSystem.GetPrefabName(entity);
-
-        static string Label(Entity entity) => $"{entity.Index}:{entity.Version}";
     }
 }
