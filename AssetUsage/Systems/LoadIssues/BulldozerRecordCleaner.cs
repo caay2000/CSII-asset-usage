@@ -90,6 +90,7 @@ namespace AssetUsage.Systems.LoadIssues
                 None = new[] { ComponentType.ReadOnly<Temp>(), ComponentType.ReadOnly<Deleted>() },
             });
             using var owners = query.ToEntityArray(Allocator.TempJob);
+            var rewrites = new List<(Entity Owner, List<T> Kept)>();
             foreach (var owner in owners)
             {
                 var elements = entityManager.GetBuffer<T>(owner, true);
@@ -103,11 +104,14 @@ namespace AssetUsage.Systems.LoadIssues
                     }
                 }
 
-                if (kept.Count == elements.Length)
+                if (kept.Count != elements.Length)
                 {
-                    continue;
+                    rewrites.Add((owner, kept));
                 }
+            }
 
+            foreach (var (owner, kept) in rewrites)
+            {
                 var replacement = commands.SetBuffer<T>(owner);
                 foreach (var element in kept)
                 {
