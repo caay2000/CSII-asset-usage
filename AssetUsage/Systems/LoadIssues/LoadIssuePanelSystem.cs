@@ -460,7 +460,7 @@ namespace AssetUsage.Systems.LoadIssues
 
         void ForgetCase(MissingPrefabIssue issue, LocatedCase located)
         {
-            if (IsActive(issue.Id, located.Entity))
+            if (IsActive(issue.Id, located.Entity) && issue.Cursor > 0 && ReferenceEquals(issue.Located[issue.Cursor - 1], located))
             {
                 report.RemoveCurrent(issue.Id, 1);
                 activeCase = null;
