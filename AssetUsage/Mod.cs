@@ -17,6 +17,7 @@ namespace AssetUsage
             try
             {
                 updateSystem.UpdateAt<UsageSystem>(SystemUpdatePhase.ModificationEnd);
+                updateSystem.World.GetOrCreateSystemManaged<Systems.LoadIssues.LoadIssueDiagnosticSystem>();
             }
             catch (System.Exception e)
             {
