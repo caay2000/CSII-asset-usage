@@ -2,6 +2,7 @@ using AssetUsage.Systems;
 using Colossal.Logging;
 using Game;
 using Game.Modding;
+using Game.SceneFlow;
 
 namespace AssetUsage
 {
@@ -17,11 +18,24 @@ namespace AssetUsage
             try
             {
                 updateSystem.UpdateAt<UsageSystem>(SystemUpdatePhase.ModificationEnd);
-                updateSystem.World.GetOrCreateSystemManaged<Systems.LoadIssues.LoadIssueDiagnosticSystem>();
+                updateSystem.UpdateAt<Systems.LoadIssues.LoadIssuePanelSystem>(SystemUpdatePhase.UIUpdate);
+                RegisterUIAssets();
             }
             catch (System.Exception e)
             {
                 Log.Error(e);
+            }
+        }
+
+        void RegisterUIAssets()
+        {
+            if (GameManager.instance.modManager.TryGetExecutableAsset(this, out var asset))
+            {
+                Colossal.UI.UIManager.defaultUISystem?.AddHostLocation("assetusage", System.IO.Path.GetDirectoryName(asset.path), false);
+            }
+            else
+            {
+                Log.Warn("Mod folder not found; the panel icon will be missing.");
             }
         }
 

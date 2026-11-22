@@ -29,9 +29,9 @@ namespace AssetUsage.Tests
         public void Counts_references_by_kind_and_keeps_the_first_entity()
         {
             var report = new LoadIssueReport();
-            report.AddReference(Building, "PrefabRef", "10:1");
-            report.AddReference(Building, "PrefabRef", "11:1");
-            report.AddReference(Building, "UnderConstruction", "12:1");
+            report.AddReference(Building, "PrefabRef", new CaseRef(10, 1), true);
+            report.AddReference(Building, "PrefabRef", new CaseRef(11, 1), true);
+            report.AddReference(Building, "UnderConstruction", new CaseRef(12, 1), true);
 
             var issue = report.Missing.Single();
             Assert.Equal(3, issue.ReferenceCount);
@@ -56,8 +56,8 @@ namespace AssetUsage.Tests
         public void A_broken_node_is_listed_once()
         {
             var report = new LoadIssueReport();
-            report.AddBrokenNode(398223);
-            report.AddBrokenNode(398223);
+            report.AddBrokenNode(new CaseRef(398223, 1));
+            report.AddBrokenNode(new CaseRef(398223, 1));
 
             Assert.Single(report.BrokenNodes);
         }
@@ -66,9 +66,9 @@ namespace AssetUsage.Tests
         public void Lines_start_with_the_summary_and_order_by_category()
         {
             var report = new LoadIssueReport();
-            report.AddReference(Building, "PrefabRef", "10:1");
+            report.AddReference(Building, "PrefabRef", new CaseRef(10, 1), true);
             report.AddMissing(Content);
-            report.AddBrokenNode(5);
+            report.AddBrokenNode(new CaseRef(5, 1));
 
             var lines = report.Lines(12).ToList();
 

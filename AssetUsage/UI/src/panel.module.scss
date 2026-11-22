@@ -1,0 +1,40 @@
+$panel: rgba(20, 28, 43, 0.94);
+$line: rgba(255, 255, 255, 0.08);
+$soft: rgba(255, 255, 255, 0.07);
+$primary: #3d8fe0;
+$text: #f2f5f9;
+$text2: #a9b6c8;
+$title: #7cc6ff;
+$danger: #ff8a80;
+
+.panel {
+    position: fixed; left: 20rem; top: 90rem; width: 520rem; height: 640rem;
+    max-height: calc(100vh - 120rem);
+    display: flex; flex-direction: column;
+    pointer-events: auto;
+    background-color: $panel; border: 1rem solid $line; border-radius: 6rem;
+    box-shadow: 0 8rem 30rem rgba(0, 0, 0, 0.45);
+    color: $text; font-size: 14rem;
+}
+.header { display: flex; flex-direction: row; align-items: center; padding: 10rem 12rem; border-bottom: 1rem solid $line; }
+.title { color: $title; font-size: 17rem; font-weight: bold; }
+.total { flex: 1; margin-left: 8rem; color: $text2; }
+.list { flex: 1; min-height: 0; }
+.row { display: flex; flex-direction: row; align-items: center; min-height: 30rem; padding: 2rem 8rem; }
+.branch { cursor: pointer; &:hover { background-color: $soft; } }
+.prefab { padding-left: 40rem; }
+.arrow { width: 16rem; color: $text2; }
+.name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.count, .note { margin-left: 8rem; color: $text2; font-size: 12rem; white-space: nowrap; }
+.kept { padding: 0 8rem 6rem; color: $text2; font-size: 12rem; }
+.stepper { display: flex; flex-direction: row; align-items: center; margin-left: 8rem; }
+.position { min-width: 58rem; text-align: center; font-size: 12rem; }
+.action, .icon {
+    pointer-events: auto; cursor: pointer; border: none; border-radius: 4rem;
+    background-color: $soft; color: $text; font-size: 13rem;
+    &:hover { background-color: $primary; }
+}
+.action { height: 28rem; padding: 0 12rem; margin-right: 6rem; }
+.icon { width: 26rem; height: 26rem; padding: 0; }
+.empty { padding: 16rem 12rem; color: $text2; }
+.error { padding: 12rem; color: $danger; }

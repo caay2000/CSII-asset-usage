@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.7 (2026-11-22)
+- Panel de problemas de carga en la partida, de solo lectura: árbol mod > tipo > prefab con contadores, flechas para ir
+  con la cámara a cada caso, grupo de nodos rotos y botón Rescan. Lo que se elimina sale de la lista sin recargar.
+- Una misma referencia ya no se cuenta dos veces en el log.
+
 ## 0.1.6 (2026-11-22)
 - Diagnóstico de problemas de carga, solo en el log: al terminar de cargar una partida lista los prefabs que faltan, qué
   los referencia, qué mod los aporta y los nodos con el grafo eléctrico roto. No modifica la partida.

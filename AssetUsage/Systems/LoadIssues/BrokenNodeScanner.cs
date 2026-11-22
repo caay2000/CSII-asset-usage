@@ -36,7 +36,7 @@ namespace AssetUsage.Systems.LoadIssues
                     var node = connectedNodes[j].m_Node;
                     if (IsBroken(node, connections[i].m_ElectricityNode))
                     {
-                        report.AddBrokenNode(node.Index);
+                        report.AddBrokenNode(new CaseRef(node.Index, node.Version));
                     }
                 }
             }
