@@ -115,7 +115,7 @@ namespace AssetUsage.Systems.LoadIssues
 
         public (int Removed, int Kept) RemoveObjects()
         {
-            var targets = new List<Entity>();
+            var targets = new HashSet<Entity>();
             int kept = 0;
             using (var query = entityManager.CreateEntityQuery(new EntityQueryDesc
             {
@@ -160,14 +160,48 @@ namespace AssetUsage.Systems.LoadIssues
                 }
             }
 
+            int removed = targets.Count;
+            AddOwnedChildren(targets);
             var commands = barrier.CreateCommandBuffer();
             foreach (var target in targets)
             {
                 commands.AddComponent<Deleted>(target);
             }
 
-            return (targets.Count, kept);
+            return (removed, kept);
         }
+
+        void AddOwnedChildren(HashSet<Entity> targets)
+        {
+            var open = new Stack<Entity>(targets);
+            while (open.Count > 0)
+            {
+                var parent = open.Pop();
+                if (!entityManager.HasBuffer<Game.Objects.SubObject>(parent))
+                {
+                    continue;
+                }
+
+                var children = entityManager.GetBuffer<Game.Objects.SubObject>(parent, true);
+                for (int i = 0; i < children.Length; i++)
+                {
+                    var child = children[i].m_SubObject;
+                    if (IsOwnedChild(child, parent) && targets.Add(child))
+                    {
+                        open.Push(child);
+                    }
+                }
+            }
+        }
+
+        bool IsOwnedChild(Entity child, Entity parent) =>
+            entityManager.Exists(child)
+            && entityManager.HasComponent<Owner>(child)
+            && entityManager.GetComponentData<Owner>(child).m_Owner == parent
+            && !entityManager.HasComponent<Deleted>(child)
+            && !entityManager.HasComponent<Game.Objects.Secondary>(child)
+            && !entityManager.HasComponent<Building>(child)
+            && !entityManager.HasComponent<ServiceUpgrade>(child);
 
         bool IsStandaloneOrInBuilding(Entity entity)
         {

@@ -303,7 +303,7 @@ namespace AssetUsage.Systems.LoadIssues
         void RemoveObjects() => ApplyFix(() =>
         {
             var (removed, kept) = fixer.RemoveObjects();
-            return $"Removed {removed} objects, kept {kept} that belong to a road or another non-building owner.";
+            return $"Removed {removed} objects, kept {kept} owned by a road or similar. Road, pillar, utility and unlocated objects stay listed.";
         });
 
         void ReplaceSurfaces(string id) => ApplyFix(() =>
