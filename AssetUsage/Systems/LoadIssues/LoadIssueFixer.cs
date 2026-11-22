@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Game;
 using Game.Buildings;
@@ -12,11 +13,31 @@ using AreaExtractor = Game.Areas.Extractor;
 using AreaStorage = Game.Areas.Storage;
 using AreaSurface = Game.Areas.Surface;
 using AreaTerrain = Game.Areas.Terrain;
+using Random = Unity.Mathematics.Random;
 
 namespace AssetUsage.Systems.LoadIssues
 {
     public sealed class LoadIssueFixer
     {
+        static readonly ComponentType[] SimulationAreaTypes =
+        {
+            ComponentType.ReadWrite<AreaStorage>(),
+            ComponentType.ReadWrite<AreaExtractor>(),
+            ComponentType.ReadWrite<AreaTerrain>(),
+        };
+
+        static readonly ComponentType[] SpecialAreaTypes =
+        {
+            ComponentType.ReadWrite<AreaStorage>(),
+            ComponentType.ReadWrite<AreaExtractor>(),
+            ComponentType.ReadWrite<AreaTerrain>(),
+            ComponentType.ReadWrite<Game.Areas.Clip>(),
+            ComponentType.ReadWrite<Game.Areas.HangaroundLocation>(),
+            ComponentType.ReadWrite<Game.Areas.SubArea>(),
+            ComponentType.ReadWrite<Game.Net.SubLane>(),
+            ComponentType.ReadWrite<Game.Objects.SubObject>(),
+        };
+
         readonly EntityManager entityManager;
         readonly EndFrameBarrier barrier;
         readonly EntityArchetype rentersUpdated;
@@ -80,7 +101,7 @@ namespace AssetUsage.Systems.LoadIssues
 
         public (int Removed, int Kept) RemoveSurfaces()
         {
-            var (targets, kept) = CollectMissingSurfaces();
+            var (targets, kept) = CollectMissingSurfaces(SimulationAreaTypes);
             var commands = barrier.CreateCommandBuffer();
             foreach (var surface in targets)
             {
@@ -92,7 +113,7 @@ namespace AssetUsage.Systems.LoadIssues
 
         public (int Replaced, int Kept) ReplaceSurfaces(Entity replacement)
         {
-            var (targets, kept) = CollectMissingSurfaces();
+            var (targets, kept) = CollectMissingSurfaces(SpecialAreaTypes);
             var commands = barrier.CreateCommandBuffer();
             foreach (var surface in targets)
             {
@@ -113,9 +134,7 @@ namespace AssetUsage.Systems.LoadIssues
             using var types = entityManager.GetComponentData<AreaData>(prefab).m_Archetype.GetComponentTypes(Allocator.Temp);
             foreach (var type in types)
             {
-                if (type == ComponentType.ReadWrite<AreaStorage>()
-                    || type == ComponentType.ReadWrite<AreaExtractor>()
-                    || type == ComponentType.ReadWrite<AreaTerrain>())
+                if (Array.Exists(SpecialAreaTypes, special => special.TypeIndex == type.TypeIndex))
                 {
                     return false;
                 }
@@ -124,7 +143,7 @@ namespace AssetUsage.Systems.LoadIssues
             return true;
         }
 
-        (List<Entity> Targets, int Kept) CollectMissingSurfaces()
+        (List<Entity> Targets, int Kept) CollectMissingSurfaces(ComponentType[] excluded)
         {
             var targets = new List<Entity>();
             int kept = 0;
@@ -138,7 +157,8 @@ namespace AssetUsage.Systems.LoadIssues
                     continue;
                 }
 
-                if (IsPlainInstance(entities[i]))
+                var surface = entities[i];
+                if (!Array.Exists(excluded, type => entityManager.HasComponent(surface, type)))
                 {
                     targets.Add(entities[i]);
                 }
@@ -150,11 +170,6 @@ namespace AssetUsage.Systems.LoadIssues
 
             return (targets, kept);
         }
-
-        bool IsPlainInstance(Entity surface) =>
-            !entityManager.HasComponent<AreaStorage>(surface)
-            && !entityManager.HasComponent<AreaExtractor>(surface)
-            && !entityManager.HasComponent<AreaTerrain>(surface);
 
         List<Entity> BrandsOf(Entity companyPrefab, Dictionary<Entity, List<Entity>> cache)
         {

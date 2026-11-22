@@ -307,7 +307,7 @@ namespace AssetUsage.Systems.LoadIssues
             }
 
             var (replaced, kept) = fixer.ReplaceSurfaces(replacement);
-            return $"Replaced {replaced} surfaces with {PrefabIds.Name(id)}, kept {kept} storage, extractor or terrain areas.";
+            return $"Replaced {replaced} surfaces with {PrefabIds.Name(id)}, kept {kept} special areas.";
         });
 
         void ApplyFix(Func<string> fix)

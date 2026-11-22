@@ -108,7 +108,7 @@ const FixBar = ({ group }: { group: IssueGroup }) => {
         <>
             <div className={styles.fix}>
                 {group.fixes.includes("changeBrand") && (
-                    <button className={styles.action} onClick={() => confirm(`Change the brand of ${group.count} companies?`, actions.changeBrands)}>Change all brands</button>
+                    <button className={styles.action} onClick={() => confirm("Change the missing brand of every company that has a compatible brand loaded?", actions.changeBrands)}>Change all brands</button>
                 )}
                 {group.fixes.includes("remove") && (
                     <button className={styles.action} onClick={() => confirm("Remove every missing surface, including those inside buildings?", actions.removeSurfaces)}>Remove all</button>
