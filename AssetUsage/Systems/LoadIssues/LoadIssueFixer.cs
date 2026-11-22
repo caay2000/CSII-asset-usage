@@ -101,9 +101,9 @@ namespace AssetUsage.Systems.LoadIssues
             return (changed, skipped);
         }
 
-        public (int Removed, int Kept) RemoveSurfaces()
+        public (int Removed, int Kept) RemoveSurfaces(Entity missingSurface)
         {
-            var (targets, kept) = CollectMissingSurfaces(SimulationAreaTypes);
+            var (targets, kept) = CollectMissingSurfaces(missingSurface, SimulationAreaTypes);
             var commands = barrier.CreateCommandBuffer();
             foreach (var surface in targets)
             {
@@ -228,9 +228,9 @@ namespace AssetUsage.Systems.LoadIssues
             return false;
         }
 
-        public (int Replaced, int Kept) ReplaceSurfaces(Entity replacement)
+        public (int Replaced, int Kept) ReplaceSurfaces(Entity missingSurface, Entity replacement)
         {
-            var (targets, kept) = CollectMissingSurfaces(SpecialAreaTypes);
+            var (targets, kept) = CollectMissingSurfaces(missingSurface, SpecialAreaTypes);
             var commands = barrier.CreateCommandBuffer();
             foreach (var surface in targets)
             {
@@ -260,7 +260,7 @@ namespace AssetUsage.Systems.LoadIssues
             return true;
         }
 
-        (List<Entity> Targets, int Kept) CollectMissingSurfaces(ComponentType[] excluded)
+        (List<Entity> Targets, int Kept) CollectMissingSurfaces(Entity missingSurface, ComponentType[] excluded)
         {
             var targets = new List<Entity>();
             int kept = 0;
@@ -269,7 +269,7 @@ namespace AssetUsage.Systems.LoadIssues
             using var prefabs = query.ToComponentDataArray<PrefabRef>(Allocator.TempJob);
             for (int i = 0; i < entities.Length; i++)
             {
-                if (!IsMissing(prefabs[i].m_Prefab))
+                if (prefabs[i].m_Prefab != missingSurface || !IsMissing(missingSurface))
                 {
                     continue;
                 }

@@ -80,9 +80,9 @@ namespace AssetUsage.Systems.LoadIssues
             AddBinding(new TriggerBinding<string, int>(Group, "step", Step));
             AddBinding(new TriggerBinding<int>(Group, "stepNode", StepNode));
             AddBinding(new TriggerBinding(Group, "changeBrands", ChangeBrands));
-            AddBinding(new TriggerBinding(Group, "removeSurfaces", RemoveSurfaces));
+            AddBinding(new TriggerBinding<string>(Group, "removeSurface", RemoveSurface));
             AddBinding(new TriggerBinding(Group, "removeObjects", RemoveObjects));
-            AddBinding(new TriggerBinding<string>(Group, "replaceSurfaces", ReplaceSurfaces));
+            AddBinding(new TriggerBinding<string, string>(Group, "replaceSurface", ReplaceSurface));
         }
 
         protected override void OnGamePreload(Purpose purpose, GameMode mode)
@@ -119,7 +119,6 @@ namespace AssetUsage.Systems.LoadIssues
             nextSweep = UnityEngine.Time.realtimeSinceStartup + SweepEverySeconds;
             try
             {
-                AdvanceIfResolved();
                 Sweep();
             }
             catch (Exception e)
@@ -142,86 +141,6 @@ namespace AssetUsage.Systems.LoadIssues
             changed = false;
             activeIssue = null;
             activeCase = null;
-        }
-
-        void AdvanceIfResolved()
-        {
-            if (!activeCase.HasValue || fixPending || !views.PlayerIsIdle)
-            {
-                return;
-            }
-
-            var current = activeCase.Value;
-            if (activeIssue == null)
-            {
-                AdvanceFromBrokenNode(current);
-                return;
-            }
-
-            string id = activeIssue;
-            var issue = report.Missing.FirstOrDefault(i => i.Id == id);
-            if (issue == null || !issue.Located.Any(l => l.Entity.Equals(current)))
-            {
-                activeCase = null;
-            }
-            else if (!IsOpen(id, current))
-            {
-                string next = NextIssue(id);
-                report.RemoveCurrent(id, 1);
-                activeCase = null;
-                if (issue.Located.Count > 0)
-                {
-                    Step(id, 1);
-                }
-
-                if (!activeCase.HasValue)
-                {
-                    GoToIssueOrNode(next);
-                }
-            }
-        }
-
-        void AdvanceFromBrokenNode(CaseRef current)
-        {
-            if (!report.BrokenNodes.Contains(current))
-            {
-                activeCase = null;
-            }
-            else if (!IsOpen(null, current))
-            {
-                report.RemoveCurrentBrokenNode(1);
-                activeCase = null;
-                GoToIssueOrNode(report.BrokenNodes.Count > 0 ? null : NextIssue(null));
-            }
-        }
-
-        string NextIssue(string afterId) => LoadIssueTree.NextIssue(LoadIssueTree.Build(report, origins), afterId);
-
-        void GoToIssueOrNode(string issueId)
-        {
-            int attempts = report.Missing.Count;
-            for (; issueId != null && attempts > 0; attempts--)
-            {
-                Step(issueId, 1);
-                if (activeCase.HasValue)
-                {
-                    return;
-                }
-
-                issueId = NextIssue(issueId);
-            }
-
-            if (report.BrokenNodes.Count > 0)
-            {
-                StepNode(1);
-                if (activeCase.HasValue)
-                {
-                    return;
-                }
-            }
-
-            views.Reset();
-            Publish();
         }
 
         bool IsOpen(string issueId, CaseRef target)
@@ -294,27 +213,37 @@ namespace AssetUsage.Systems.LoadIssues
             return $"Changed the brand of {changedCount} companies, left {skipped} unchanged because no compatible brand is loaded.";
         });
 
-        void RemoveSurfaces() => ApplyFix(() =>
+        void RemoveSurface(string id) => ApplyFix(() =>
         {
-            var (removed, kept) = fixer.RemoveSurfaces();
-            return $"Removed {removed} surfaces, kept {kept} storage, extractor or terrain areas.";
+            if (!prefabsById.TryGetValue(id, out var missingSurface))
+            {
+                return "That surface is no longer listed.";
+            }
+
+            var (removed, kept) = fixer.RemoveSurfaces(missingSurface);
+            return $"Removed {removed} {PrefabIds.Name(id)} surfaces, kept {kept} storage, extractor or terrain areas.";
         });
 
         void RemoveObjects() => ApplyFix(() =>
         {
             var (removed, kept) = fixer.RemoveObjects();
-            return $"Removed {removed} objects, kept {kept} owned by a road or similar. Road, pillar, utility and unlocated objects stay listed.";
+            return $"Removed {removed} objects, kept {kept} owned by a road or similar. Road, pillar and utility objects stay listed.";
         });
 
-        void ReplaceSurfaces(string id) => ApplyFix(() =>
+        void ReplaceSurface(string id, string replacementId) => ApplyFix(() =>
         {
-            if (!replacementSurfaces.TryGetValue(id, out var replacement) || !fixer.IsPlainSurface(replacement))
+            if (!prefabsById.TryGetValue(id, out var missingSurface))
+            {
+                return "That surface is no longer listed.";
+            }
+
+            if (!replacementSurfaces.TryGetValue(replacementId, out var replacement) || !fixer.IsPlainSurface(replacement))
             {
                 return "That surface is no longer available.";
             }
 
-            var (replaced, kept) = fixer.ReplaceSurfaces(replacement);
-            return $"Replaced {replaced} surfaces with {PrefabIds.Name(id)}, kept {kept} special areas.";
+            var (replaced, kept) = fixer.ReplaceSurfaces(missingSurface, replacement);
+            return $"Replaced {replaced} {PrefabIds.Name(id)} surfaces with {PrefabIds.Name(replacementId)}, kept {kept} special areas.";
         });
 
         void ApplyFix(Func<string> fix)
@@ -375,7 +304,7 @@ namespace AssetUsage.Systems.LoadIssues
                 prefabsById = scanner.PrefabsById;
                 ResetSweep();
                 double elapsed = watch.Elapsed.TotalMilliseconds;
-                foreach (string line in logDetails ? report.Lines(elapsed).Concat(scanner.UnlocatedSamples) : new[] { report.Summary(elapsed) })
+                foreach (string line in logDetails ? report.Lines(elapsed).Concat(scanner.UnlocatedSamples).Append($"Ignored {scanner.BulldozerRecords} Better Bulldozer removal records.") : new[] { report.Summary(elapsed) })
                 {
                     Mod.Log.Info(line);
                 }
@@ -492,8 +421,9 @@ namespace AssetUsage.Systems.LoadIssues
                 if (sweepCase < issue.Located.Count)
                 {
                     var located = issue.Located[sweepCase];
-                    if (!IsActive(issue.Id, located.Entity) && !StillReferences(ToEntity(located.Entity), located.Kind, issue.Id) && issue.Remove(located))
+                    if (!StillReferences(ToEntity(located.Entity), located.Kind, issue.Id))
                     {
+                        ForgetCase(issue, located);
                         changed = true;
                     }
                     else
@@ -512,8 +442,9 @@ namespace AssetUsage.Systems.LoadIssues
             {
                 var node = report.BrokenNodes[sweepNode];
                 var nodeEntity = ToEntity(node);
-                if (!IsActive(null, node) && (IsGone(nodeEntity) || !brokenScanner.StillBroken(nodeEntity)) && report.RemoveBrokenNode(node))
+                if (IsGone(nodeEntity) || !brokenScanner.StillBroken(nodeEntity))
                 {
+                    ForgetBrokenNode(node);
                     changed = true;
                 }
                 else
@@ -525,6 +456,32 @@ namespace AssetUsage.Systems.LoadIssues
             }
 
             return false;
+        }
+
+        void ForgetCase(MissingPrefabIssue issue, LocatedCase located)
+        {
+            if (IsActive(issue.Id, located.Entity))
+            {
+                report.RemoveCurrent(issue.Id, 1);
+                activeCase = null;
+            }
+            else
+            {
+                issue.Remove(located);
+            }
+        }
+
+        void ForgetBrokenNode(CaseRef node)
+        {
+            if (IsActive(null, node))
+            {
+                report.RemoveCurrentBrokenNode(1);
+                activeCase = null;
+            }
+            else
+            {
+                report.RemoveBrokenNode(node);
+            }
         }
 
         bool IsGone(Entity entity) => !EntityManager.Exists(entity) || EntityManager.HasComponent<Deleted>(entity);

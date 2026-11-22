@@ -94,7 +94,7 @@ namespace AssetUsage.Tests
 
         [Theory]
         [InlineData(LoadIssueCategory.Brand, new[] { LoadIssueFixes.ChangeBrand })]
-        [InlineData(LoadIssueCategory.Surface, new[] { LoadIssueFixes.Remove, LoadIssueFixes.Replace })]
+        [InlineData(LoadIssueCategory.Surface, new string[0])]
         [InlineData(LoadIssueCategory.Object, new[] { LoadIssueFixes.Remove })]
         [InlineData(LoadIssueCategory.Building, new string[0])]
         public void Offers_only_the_bulk_fixes_of_each_type(LoadIssueCategory category, string[] expected)
@@ -119,27 +119,19 @@ namespace AssetUsage.Tests
         }
 
         [Fact]
-        public void The_next_issue_follows_the_panel_order_and_skips_issues_without_cases()
+        public void Each_surface_offers_its_own_fixes_and_the_group_none()
         {
             var report = new LoadIssueReport();
             report.AddReference("SurfacePrefab:A (a)", "PrefabRef", new CaseRef(1, 1), true);
-            report.AddReference("SurfacePrefab:B (b)", "PrefabRef", new CaseRef(2, 1), false);
-            report.AddReference("BrandPrefab:C (c)", "Company", new CaseRef(3, 1), true);
+            report.AddReference("BrandPrefab:C (c)", "Company", new CaseRef(2, 1), true);
 
             var tree = LoadIssueTree.Build(report, null);
+            var surfaces = tree.Groups.Single(g => g.Category == "Surface");
+            var brands = tree.Groups.Single(g => g.Category == "Brand");
 
-            Assert.Equal("BrandPrefab:C (c)", LoadIssueTree.NextIssue(tree, "SurfacePrefab:A (a)"));
-            Assert.Equal("SurfacePrefab:A (a)", LoadIssueTree.NextIssue(tree, "BrandPrefab:C (c)"));
-            Assert.Equal("SurfacePrefab:A (a)", LoadIssueTree.NextIssue(tree, null));
-        }
-
-        [Fact]
-        public void There_is_no_next_issue_when_only_the_current_one_has_cases()
-        {
-            var report = new LoadIssueReport();
-            report.AddReference("SurfacePrefab:A (a)", "PrefabRef", new CaseRef(1, 1), true);
-
-            Assert.Null(LoadIssueTree.NextIssue(LoadIssueTree.Build(report, null), "SurfacePrefab:A (a)"));
+            Assert.Empty(surfaces.Fixes);
+            Assert.Equal(new[] { LoadIssueFixes.Remove, LoadIssueFixes.Replace }, surfaces.Mods.Single().Prefabs.Single().Fixes);
+            Assert.Empty(brands.Mods.Single().Prefabs.Single().Fixes);
         }
 
         [Fact]
