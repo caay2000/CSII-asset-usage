@@ -201,7 +201,7 @@ namespace AssetUsage.Systems.LoadIssues
             && !entityManager.HasComponent<Deleted>(child)
             && !entityManager.HasComponent<Game.Objects.Secondary>(child)
             && !entityManager.HasComponent<Building>(child)
-            && !entityManager.HasComponent<ServiceUpgrade>(child);
+            && !entityManager.HasComponent<Game.Buildings.ServiceUpgrade>(child);
 
         bool IsStandaloneOrInBuilding(Entity entity)
         {
