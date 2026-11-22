@@ -88,38 +88,50 @@ const GroupRow = ({ group }: { group: IssueGroup }) => (
 
 type Pending = { text: string; run: () => void } | null;
 
+const ConfirmBar = ({ pending, onClose }: { pending: NonNullable<Pending>; onClose: () => void }) => (
+    <div className={styles.fix}>
+        <div className={styles.fixText}>{pending.text} This cannot be undone once you save.</div>
+        <button className={styles.action} onClick={() => { pending.run(); onClose(); }}>Confirm</button>
+        <button className={styles.action} onClick={onClose}>Cancel</button>
+    </div>
+);
+
 const FixBar = ({ group }: { group: IssueGroup }) => {
     const [pending, setPending] = useState<Pending>(null);
+    if (pending) return <ConfirmBar pending={pending} onClose={() => setPending(null)} />;
+    return (
+        <div className={styles.fix}>
+            {group.fixes.includes("changeBrand") && (
+                <button className={styles.action} onClick={() => setPending({ text: "Change the missing brand of every company that has a compatible brand loaded?", run: actions.changeBrands })}>Change all brands</button>
+            )}
+            {group.fixes.includes("remove") && (
+                <button className={styles.action} onClick={() => setPending({ text: "Remove every missing object that has a position? Buildings, road objects, pillars and utilities are kept.", run: actions.removeObjects })}>Remove all</button>
+            )}
+        </div>
+    );
+};
+
+const SurfaceFixes = ({ prefab }: { prefab: PrefabNode }) => {
+    const [pending, setPending] = useState<Pending>(null);
     const [choosing, setChoosing] = useState(false);
-    const confirm = (text: string, run: () => void) => {
+    if (pending) return <ConfirmBar pending={pending} onClose={() => setPending(null)} />;
+    const pick = (surface: SurfaceOption) => {
         setChoosing(false);
-        setPending({ text, run });
+        setPending({
+            text: `Replace every ${prefab.name}, including those inside buildings, with ${surface.name}?`,
+            run: () => actions.replaceSurface(prefab.id, surface.id),
+        });
     };
-    if (pending) {
-        return (
-            <div className={styles.fix}>
-                <div className={styles.fixText}>{pending.text} This cannot be undone once you save.</div>
-                <button className={styles.action} onClick={() => { pending.run(); setPending(null); }}>Confirm</button>
-                <button className={styles.action} onClick={() => setPending(null)}>Cancel</button>
-            </div>
-        );
-    }
     return (
         <>
             <div className={styles.fix}>
-                {group.fixes.includes("changeBrand") && (
-                    <button className={styles.action} onClick={() => confirm("Change the missing brand of every company that has a compatible brand loaded?", actions.changeBrands)}>Change all brands</button>
-                )}
-                {group.fixes.includes("remove") && (
-                    <button className={styles.action} onClick={() => group.category === "Object"
-                        ? confirm("Remove every missing object that has a position? Buildings, road objects, pillars and utilities are kept.", actions.removeObjects)
-                        : confirm("Remove every missing surface, including those inside buildings?", actions.removeSurfaces)}>Remove all</button>
-                )}
-                {group.fixes.includes("replace") && (
-                    <button className={styles.action} onClick={() => setChoosing(!choosing)}>Replace all</button>
-                )}
+                <button className={styles.action} onClick={() => setPending({
+                    text: `Remove every ${prefab.name}, including those inside buildings?`,
+                    run: () => actions.removeSurface(prefab.id),
+                })}>Remove</button>
+                <button className={styles.action} onClick={() => setChoosing(!choosing)}>Replace</button>
             </div>
-            {choosing && <SurfacePicker onPick={(surface) => confirm(`Replace every missing surface, including those inside buildings, with ${surface.name}?`, () => actions.replaceSurfaces(surface.id))} />}
+            {choosing && <SurfacePicker onPick={pick} />}
         </>
     );
 };
@@ -151,6 +163,7 @@ const PrefabRow = ({ prefab }: { prefab: PrefabNode }) => (
             {prefab.located > 0 && <Stepper cursor={prefab.cursor} count={prefab.located} onStep={(delta) => actions.step(prefab.id, delta)} />}
         </div>
         {prefab.keptAliveBy.length > 0 && <div className={styles.kept}>Kept alive by {prefab.keptAliveBy.join(", ")}</div>}
+        {prefab.fixes.includes("replace") && <SurfaceFixes prefab={prefab} />}
     </div>
 );
 

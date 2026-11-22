@@ -22,6 +22,8 @@ namespace AssetUsage.Core.LoadIssues
         public int Cursor { get; set; }
 
         public List<string> KeptAliveBy { get; set; }
+
+        public List<string> Fixes { get; set; }
     }
 
     public sealed class ModNode
@@ -63,14 +65,17 @@ namespace AssetUsage.Core.LoadIssues
             {
                 case LoadIssueCategory.Brand:
                     return new List<string> { ChangeBrand };
-                case LoadIssueCategory.Surface:
-                    return new List<string> { Remove, Replace };
                 case LoadIssueCategory.Object:
                     return new List<string> { Remove };
                 default:
                     return new List<string>();
             }
         }
+
+        public static List<string> ForPrefab(MissingPrefabIssue issue) =>
+            issue.Category == LoadIssueCategory.Surface && issue.CaseCount > 0
+                ? new List<string> { Remove, Replace }
+                : new List<string>();
     }
 
     public sealed class LoadIssueTree
@@ -120,23 +125,6 @@ namespace AssetUsage.Core.LoadIssues
             };
         }
 
-        public static string NextIssue(LoadIssueTree tree, string afterId)
-        {
-            var ordered = tree.Groups
-                .SelectMany(g => g.Mods)
-                .SelectMany(m => m.Prefabs)
-                .Where(p => p.Located > 0)
-                .Select(p => p.Id)
-                .ToList();
-            int after = ordered.IndexOf(afterId);
-            if (after < 0)
-            {
-                return ordered.FirstOrDefault();
-            }
-
-            return ordered.Count > 1 ? ordered[(after + 1) % ordered.Count] : null;
-        }
-
         static IssueGroupNode BuildGroup(IGrouping<LoadIssueCategory, MissingPrefabIssue> group, IPrefabOriginLookup origins)
         {
             var mods = group
@@ -177,6 +165,7 @@ namespace AssetUsage.Core.LoadIssues
             Unlocated = issue.UnlocatedCount,
             Cursor = issue.Cursor,
             KeptAliveBy = issue.CaseCount == 0 ? issue.KeptAliveBy.Select(PrefabIds.Name).ToList() : new List<string>(),
+            Fixes = LoadIssueFixes.ForPrefab(issue),
         };
     }
 

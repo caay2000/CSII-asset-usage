@@ -10,6 +10,7 @@ export interface PrefabNode {
     unlocated: number;
     cursor: number;
     keptAliveBy: string[];
+    fixes: string[];
 }
 export interface ModNode { name: string; count: number; prefabs: PrefabNode[] }
 export interface IssueGroup { category: string; count: number; fixes: string[]; mods: ModNode[] }
@@ -59,7 +60,7 @@ export const actions = {
     step: (id: string, delta: number) => trigger(G, "step", id, delta),
     stepNode: (delta: number) => trigger(G, "stepNode", delta),
     changeBrands: () => trigger(G, "changeBrands"),
-    removeSurfaces: () => trigger(G, "removeSurfaces"),
+    removeSurface: (id: string) => trigger(G, "removeSurface", id),
     removeObjects: () => trigger(G, "removeObjects"),
-    replaceSurfaces: (id: string) => trigger(G, "replaceSurfaces", id),
+    replaceSurface: (id: string, replacementId: string) => trigger(G, "replaceSurface", id, replacementId),
 };

@@ -23,8 +23,6 @@ namespace AssetUsage.Systems.LoadIssues
             this.infoviews = infoviews;
         }
 
-        public bool PlayerIsIdle => toolSystem.activeTool is DefaultToolSystem;
-
         public void ShowBrokenNode(Entity node)
         {
             ApplyInfoview(FindInfoview(StatusOf(node)));
